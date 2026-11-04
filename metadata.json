@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Eagle Star Brand",
+  "description": "Eagle Star Brand: Professional bilingual (English \u0026 Urdu) Dubai-Pakistan money transfer, Khata loan tracking, Amanat safekeeping ledger, and authentic Urdu register receipt printing system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

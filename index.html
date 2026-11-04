@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Eagle Star Brand - Money Transfer & Khata Ledger</title>
+    <meta name="description" content="Eagle Star Brand: Professional bilingual (English & Urdu) Dubai-Pakistan money transfer, Khata loan tracking, Cash Jama (پیسہ جمع) safekeeping ledger, and authentic Urdu register receipt printing system." />
+    <meta property="og:title" content="Eagle Star Brand - Money Transfer & Khata Ledger" />
+    <meta property="og:description" content="Eagle Star Brand: Professional bilingual (English & Urdu) Dubai-Pakistan money transfer, Khata loan tracking, Cash Jama (پیسہ جمع) safekeeping ledger, and authentic Urdu register receipt printing system." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Eagle Star Brand" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Eagle Star Brand - Money Transfer & Khata Ledger" />
+    <meta name="twitter:description" content="Eagle Star Brand: Professional bilingual (English & Urdu) Dubai-Pakistan money transfer, Khata loan tracking, Cash Jama (پیسہ جمع) safekeeping ledger, and authentic Urdu register receipt printing system." />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Eagle Star Brand",
+      "alternateName": "ایگل اسٹار برانڈ",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "All",
+      "description": "Eagle Star Brand: Professional bilingual (English & Urdu) Dubai-Pakistan money transfer, Khata loan tracking, Cash Jama (پیسہ جمع) safekeeping ledger, and authentic Urdu register receipt printing system."
+    }
+    </script>
+    <script>
+      // Defensively ensure window.fetch is writable to avoid "Cannot set property fetch of #<Window> which has only a getter"
+      (function() {
+        try {
+          var _fetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return _fetch;
+            },
+            set: function(val) {
+              _fetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (err) {
+          try {
+            if (typeof Window !== 'undefined' && Window.prototype) {
+              var _protoFetch = Window.prototype.fetch;
+              Object.defineProperty(Window.prototype, 'fetch', {
+                get: function() {
+                  return _protoFetch;
+                },
+                set: function(val) {
+                  _protoFetch = val;
+                },
+                configurable: true,
+                enumerable: true
+              });
+            }
+          } catch (e2) {}
+        }
+
+        // Intercept and swallow third-party extension errors like frame_ant or fetch setter conflicts
+        window.addEventListener('error', function(event) {
+          var isExtension = event.filename && event.filename.indexOf('chrome-extension://') !== -1;
+          var isFetchError = event.message && event.message.indexOf('Cannot set property fetch') !== -1;
+          var isFrameAnt = (event.filename && event.filename.indexOf('frame_ant') !== -1) || 
+                           (event.message && event.message.indexOf('frame_ant') !== -1);
+          if (isExtension || isFetchError || isFrameAnt) {
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            if (event.preventDefault) event.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason;
+          if (reason) {
+            var msg = (reason && reason.message) ? reason.message : String(reason);
+            var stack = (reason && reason.stack) ? reason.stack : '';
+            if (
+              msg.indexOf('Cannot set property fetch') !== -1 ||
+              stack.indexOf('chrome-extension://') !== -1 ||
+              stack.indexOf('frame_ant') !== -1
+            ) {
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              if (event.preventDefault) event.preventDefault();
+            }
+          }
+        }, true);
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Montserrat:wght@500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800;900&family=Noto+Naskh+Arabic:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Gulzar&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body class="bg-slate-100 text-slate-900 antialiased selection:bg-amber-500 selection:text-slate-950">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

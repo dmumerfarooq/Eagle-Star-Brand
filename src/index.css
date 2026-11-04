@@ -1,0 +1,394 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Jameel Noori Nastaleeq';
+  src: url('https://cdn.jsdelivr.net/gh/urdutext/urdu-fonts@main/fonts/Jameel%20Noori%20Nastaleeq.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Jameel Noori Nastaleeq';
+  src: url('https://cdn.jsdelivr.net/gh/urdutext/urdu-fonts@main/fonts/Jameel%20Noori%20Nastaleeq%20Kasheeda.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --font-sans: 'Montserrat', system-ui, -apple-system, sans-serif;
+    --font-brand-en: 'Montserrat', system-ui, -apple-system, sans-serif;
+    --font-urdu-ui: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+    --font-urdu: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+    --font-arabic: 'Noto Sans Arabic', 'Noto Naskh Arabic', sans-serif;
+    --font-nastaliq: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Gulzar', serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+  }
+
+  [dir="ltr"],
+  [dir="ltr"] button,
+  [dir="ltr"] input,
+  [dir="ltr"] select,
+  [dir="ltr"] textarea,
+  [dir="ltr"] span,
+  [dir="ltr"] p,
+  [dir="ltr"] h1,
+  [dir="ltr"] h2,
+  [dir="ltr"] h3,
+  [dir="ltr"] h4,
+  [dir="ltr"] th,
+  [dir="ltr"] td {
+    font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+  }
+
+  [dir="rtl"],
+  [dir="rtl"] button,
+  [dir="rtl"] input,
+  [dir="rtl"] select,
+  [dir="rtl"] textarea,
+  [dir="rtl"] span,
+  [dir="rtl"] p,
+  [dir="rtl"] h1,
+  [dir="rtl"] h2,
+  [dir="rtl"] h3,
+  [dir="rtl"] h4,
+  [dir="rtl"] th,
+  [dir="rtl"] td {
+    font-family: var(--font-urdu-ui), var(--font-arabic), system-ui, sans-serif;
+    letter-spacing: normal !important;
+  }
+}
+
+/* Executive Brand Typography using Montserrat for English */
+.font-brand-en {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.font-brand-sub {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Crystal-clear Urdu UI Font for Menus, Buttons, Headings, and Dashboards */
+.font-urdu-ui {
+  font-family: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+  letter-spacing: normal !important;
+}
+
+.font-brand-urdu {
+  font-family: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+[dir="rtl"] .font-brand-urdu,
+.font-brand-urdu[dir="rtl"] {
+  font-family: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif;
+}
+
+/* Nastaleeq reserved for traditional calligraphic receipts */
+.font-urdu-nastaliq {
+  font-family: var(--font-sans);
+}
+[dir="rtl"] .font-urdu-nastaliq,
+.font-urdu-nastaliq[dir="rtl"] {
+  font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Noori Nastaleeq', 'Gulzar', serif;
+  line-height: 2.2;
+}
+
+.font-urdu-heading {
+  font-family: var(--font-sans);
+  letter-spacing: normal;
+}
+[dir="rtl"] .font-urdu-heading,
+.font-urdu-heading[dir="rtl"] {
+  font-family: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+  letter-spacing: normal !important;
+  line-height: 1.5;
+}
+
+.font-urdu-body {
+  font-family: var(--font-sans);
+}
+[dir="rtl"] .font-urdu-body,
+.font-urdu-body[dir="rtl"] {
+  font-family: 'Noto Sans Arabic', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+  letter-spacing: normal !important;
+  line-height: 1.6;
+}
+
+/* Premium 24K Gold Metallic Text & Badges */
+.gold-metallic-text {
+  background: linear-gradient(135deg, #FFFDF0 0%, #FDE68A 25%, #F59E0B 55%, #D97706 85%, #B45309 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-metallic-text-warm {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FBBF24 45%, #D97706 85%, #92400E 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-border-glow {
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.16);
+}
+
+.gold-badge {
+  background: linear-gradient(135deg, #FDE68A 0%, #F59E0B 50%, #D97706 100%);
+  color: #0F172A;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+
+/* Deep Executive Sapphire Theme Gradients */
+.bg-executive-dark {
+  background: linear-gradient(135deg, #070D1E 0%, #0B1736 50%, #081024 100%);
+}
+
+.bg-executive-header {
+  background: linear-gradient(90deg, #060B18 0%, #0C1A38 50%, #081226 100%);
+}
+
+.card-gradient-sapphire {
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.7) 0%, #FFFFFF 100%);
+}
+
+.card-gradient-emerald {
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.7) 0%, #FFFFFF 100%);
+}
+
+.card-gradient-rose {
+  background: linear-gradient(180deg, rgba(255, 241, 242, 0.7) 0%, #FFFFFF 100%);
+}
+
+.card-gradient-amber {
+  background: linear-gradient(180deg, rgba(254, 243, 199, 0.7) 0%, #FFFFFF 100%);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}
+
+/* Authentic Musaffah Register Sheet Heading - Matching the official reference slip exactly */
+.font-musaffah-title {
+  font-family: 'Noto Naskh Arabic', 'Calibri', 'Segoe UI', Arial, sans-serif !important;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.65;
+}
+
+/* Eye-Catching Illustration & Interactive Keyframe Animations */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(0.5deg);
+  }
+}
+
+@keyframes float-reverse {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(10px) rotate(-0.5deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes dash-flow {
+  from {
+    stroke-dashoffset: 80;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes shimmer-glow {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 5s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: float-reverse 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-dash-flow {
+  animation: dash-flow 2.5s linear infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer-glow 3s infinite;
+}
+
+/* Complete & Robust Print Isolation Styles */
+@media print {
+  /* 1. Hide entire application shell, navigation, header, and background dashboard */
+  header,
+  aside,
+  main,
+  nav,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  /* 2. Reset html, body & #root to clean unclipped white vector surface */
+  html, body, #root, #root > div {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    font-size: 12pt;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 3. Modal Backdrops & Overlays - strip fixed positioning and dark glass filters */
+  .receipt-modal-backdrop,
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    box-shadow: none !important;
+  }
+
+  .receipt-modal-card,
+  .rounded-2xl,
+  .rounded-3xl {
+    position: static !important;
+    border: none !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* 4. Receipt paper canvas styling for print */
+  .print-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .print-receipt-paper {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 0 16px 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* 5. Force all borders, text & table lines to be crisp dark and highly readable */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  p, span, strong, td, th, h1, h2, h3, h4, div {
+    color: #000000 !important;
+  }
+
+  .ref-black-badge {
+    background-color: #000000 !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th {
+    color: #000000 !important;
+    border: 1.5px solid #000000 !important;
+    background-color: #f1f5f9 !important;
+    font-size: 11pt !important;
+    font-weight: 800 !important;
+    padding: 6px 8px !important;
+  }
+
+  td {
+    color: #000000 !important;
+    border: 1px solid #475569 !important;
+    font-size: 11pt !important;
+    font-weight: 600 !important;
+    padding: 6px 8px !important;
+  }
+
+  .border, .border-2, .border-b, .border-b-2, .border-t, .border-t-2 {
+    border-color: #000000 !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 6mm;
+  }
+}
+
+

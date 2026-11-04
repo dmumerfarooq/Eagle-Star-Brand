@@ -1,0 +1,989 @@
+# MASTER PROMPT: Complete Bilingual Money Transfer, Khata & Financial Record Management Web App
+
+## 1. Your Role and Project Objective
+
+Act as a senior React developer, financial record-management system architect, bilingual Urdu UX specialist, and professional UI/UX designer.
+
+Build a complete, professional, fully functional, responsive web application for managing a money-transfer and personal financial record business operating between Dubai, United Arab Emirates, and Pakistan.
+
+The application must manage:
+
+1. Money transfers from Dubai to Pakistan.
+2. Sender and receiver customer records.
+3. AED and PKR exchange-rate calculations.
+4. Percentage-based commissions and charges.
+5. Initial receipts, payout receipts, and final transaction slips.
+6. Multiple payouts and remaining balances.
+7. A complete customer transaction history.
+8. A Khata system for borrowed money, loans, repayments, and outstanding amounts.
+9. An Amanat (امانت) and safekeeping ledger for money deposited with the business.
+10. Partial withdrawals, additional deposits, and payments sent to third parties.
+11. Yearly records, financial summaries, and printable reports.
+12. Complete English and Urdu language switching.
+
+**The most important requirement is perfect bilingual functionality.** When the admin switches to Urdu, every visible element throughout the application must change to clear, natural Urdu. No leftover English labels, buttons, navigation items, error messages, tables, reports, or receipt headings should remain in Urdu mode, except for unavoidable identifiers, phone numbers, currency codes, and proper names.
+
+The application should be straightforward enough for a nontechnical business owner to use every day.
+
+## 2. Technology and Development Approach
+
+Build the application using:
+
+- React.
+- TypeScript.
+- Vite.
+- Modern reusable components.
+- A clean, maintainable component-based architecture.
+- A reliable date and currency formatting approach.
+- A proper internationalization system supporting English and Urdu.
+- A printable receipt and PDF-generation system.
+- Local prototype data storage.
+
+### Important: No database integration yet
+
+For this development stage, **do not connect Supabase, Firebase, MySQL, PostgreSQL, or any other external database**.
+
+Build the complete frontend and functional workflows first.
+
+Use browser localStorage for the prototype's records so data can persist across browser refreshes and restarts on the same browser. Create a centralized storage/service layer so a real database can be integrated later without rewriting the entire application.
+
+Include:
+
+- Sample/demo data clearly identified as demo data.
+- Add, edit, search, and view operations.
+- Working calculations and transaction histories.
+- Data export and import for backup and recovery.
+- A clear warning in Settings that browser-based storage is not a secure, cloud-backed financial database.
+
+Do not simulate a successful database connection or claim that records are backed up to the cloud.
+
+Do not leave the application as a static design or a dashboard filled with nonfunctional buttons.
+
+## 3. Strict English and Urdu Language System
+
+This is a critical, non-negotiable requirement.
+
+Place a prominent language selector in the dashboard header:
+
+**English | اردو**
+
+English should be the initial language.
+
+When the user selects Urdu, the entire application must immediately switch to Urdu, including all pages, dialogs, forms, tables, reports, notifications, receipt templates, print layouts, and PDF documents.
+
+### English mode
+
+- Use natural, professional English.
+- Use left-to-right layout.
+- Display English labels, descriptions, and action buttons.
+
+### Urdu mode
+
+- Use natural, professional Pakistani Urdu written in the Urdu script.
+- Use right-to-left layout throughout the application.
+- Translate every interface label and message into Urdu.
+- Use familiar financial terms that Pakistani business owners understand.
+- Avoid Roman Urdu.
+- Avoid mechanically translated or unnatural Urdu.
+- Avoid mixing English and Urdu in ordinary labels.
+- Keep business names, customer names, transaction IDs, mobile numbers, and international currency codes unchanged where appropriate.
+
+Examples of required translations:
+
+| English | Urdu |
+|---|---|
+| Dashboard | مرکزی صفحہ |
+| Customers | گاہک |
+| New Transaction | نیا لین دین |
+| Money Transfer | رقم کی منتقلی |
+| Sender | رقم بھیجنے والا |
+| Receiver | رقم وصول کرنے والا |
+| Mobile Number | موبائل نمبر |
+| Address | پتہ |
+| City | شہر |
+| Amount | رقم |
+| Exchange Rate | شرحِ تبادلہ |
+| Commission | کمیشن |
+| Total Amount | کل رقم |
+| Amount Received | وصول شدہ رقم |
+| Amount Paid | ادا کی گئی رقم |
+| Remaining Balance | بقایا رقم |
+| Transaction History | لین دین کی تاریخ |
+| Print Receipt | رسید پرنٹ کریں |
+| Download PDF | پی ڈی ایف محفوظ کریں |
+| Search | تلاش کریں |
+| Save | محفوظ کریں |
+| Edit | ترمیم کریں |
+| Delete | حذف کریں |
+| Cancel | منسوخ کریں |
+| Confirm | تصدیق کریں |
+| Settings | ترتیبات |
+| Reports | رپورٹس |
+| Borrowed Money | ادھار دی گئی رقم |
+| Loan Repayment | قرض کی واپسی |
+| Safekeeping Deposit | امانت کے طور پر جمع رقم |
+| Deposit Money | رقم جمع کریں |
+| Withdraw Money | رقم نکلوانا |
+| Add Payment | ادائیگی درج کریں |
+| Due Date | واپسی کی مقررہ تاریخ |
+| Customer Code | گاہک کا کوڈ |
+| Receipt Number | رسید نمبر |
+| Final Receipt | حتمی رسید |
+| Notes | تفصیلات |
+| Signature | دستخط |
+
+Use these examples as a starting point, not as the complete translation dictionary.
+
+### Technical requirements for Urdu
+
+1. Implement a centralized translation dictionary covering every page and component.
+2. Do not hardcode visible English text directly into components.
+3. Every user-facing string must have an Urdu translation.
+4. Include validation errors, confirmation dialogs, empty states, loading messages, success messages, tooltips, status labels, date filters, export controls, and print buttons.
+5. Use `lang="ur"` and `dir="rtl"` when Urdu is active, and `lang="en"` and `dir="ltr"` when English is active.
+6. Apply correct RTL alignment to navigation, forms, tables, icons, dropdowns, sidebars, and dialogs.
+7. Use a suitable font such as Noto Nastaliq Urdu or Noto Naskh Arabic, selected and tested for correct Urdu rendering.
+8. Ensure punctuation, parentheses, numbers, and currency amounts remain readable in RTL layouts.
+9. Preserve the selected language during navigation and refresh.
+10. Keep financial calculations and stored values independent of the display language.
+11. Translate all receipt and PDF content using the selected language.
+12. Do not use Roman Urdu as a substitute for Urdu script.
+
+Before considering the app complete, test every screen in both languages.
+
+## 4. Professional UI and Visual Design
+
+Create a clean, modern, trustworthy financial management interface.
+
+### Visual style
+
+- White and light-grey background.
+- Dark navy or professional blue accents.
+- Green for completed payments.
+- Orange for pending items.
+- Red for overdue balances, errors, and warnings.
+- Clear typography and readable financial figures.
+- Restrained borders, soft shadows, and consistent spacing.
+- Professional cards, tables, and forms.
+- Responsive desktop, tablet, and mobile layouts.
+
+Avoid excessive gradients, unnecessary animations, oversized graphics, and complicated dashboards.
+
+The interface should feel like a practical financial record system, not an entertainment application.
+
+### Navigation
+
+Create a collapsible sidebar with:
+
+1. Dashboard.
+2. Money Transfers.
+3. Customers.
+4. Receivers.
+5. Khata / Borrowed Money.
+6. Amanat / Safekeeping.
+7. Cash and Account Ledger.
+8. Receipts and Statements.
+9. Transaction History.
+10. Reports.
+11. Settings.
+
+The navigation must switch completely into Urdu when Urdu is selected.
+
+Add prominent quick-action buttons for:
+
+- New Money Transfer.
+- Add Customer.
+- Record Loan.
+- Record Amanat.
+- Record Repayment.
+- Record Withdrawal.
+- Print Receipt.
+
+## 5. Dashboard
+
+Create a practical dashboard showing the business's current records.
+
+Include separate summaries for:
+
+### Money transfers
+
+- Total number of transfers.
+- Total AED received.
+- Total PKR equivalent.
+- Total commission earned.
+- Total amount paid to receivers.
+- Total outstanding payout balances.
+- Pending and completed transfers.
+
+### Khata
+
+- Total amount lent to others.
+- Total repayments received.
+- Total outstanding loans.
+- Number of overdue loans.
+- Upcoming repayment dates.
+
+### Amanat
+
+- Total money held for safekeeping.
+- Total additional deposits.
+- Total withdrawals.
+- Total amounts transferred to third parties.
+- Current balance of each depositor.
+
+### Dashboard features
+
+- Today's activity.
+- Recent transactions.
+- Recent repayments and withdrawals.
+- Search by name or mobile number.
+- Date range filters.
+- Monthly and yearly summaries.
+- Quick links to customer histories.
+
+Keep AED and PKR totals separate. Do not add different currencies together without an explicitly defined conversion.
+
+Dashboard figures must derive from actual application records, not hardcoded numbers.
+
+## 6. Customer and Receiver Management
+
+Create a customer management module.
+
+### Sender/customer fields
+
+- Automatically generated customer ID.
+- Full name.
+- Mobile number.
+- Optional secondary mobile number.
+- Address.
+- City.
+- Country.
+- Date added.
+- Notes.
+
+### Receiver fields
+
+- Receiver ID.
+- Full name.
+- Mobile number.
+- Address.
+- City.
+- Province.
+- Country.
+- Optional notes.
+
+Allow a sender to have multiple receivers.
+
+Allow a person to appear in different roles where appropriate, such as a customer, borrower, depositor, or receiver.
+
+Provide:
+
+- Add customer.
+- Edit customer.
+- Search customer.
+- View customer profile.
+- View complete history.
+- Search by name, phone number, customer ID, or receiver.
+- Show all associated money transfers, loans, repayments, deposits, withdrawals, and receipts.
+
+Warn about possible duplicate phone numbers before creating duplicate records.
+
+## 7. Dubai-to-Pakistan Money Transfer Module
+
+Build a complete money-transfer record workflow.
+
+### Step 1: Transaction identification
+
+- Generate a unique transaction ID.
+- Record date and time.
+- Select an existing sender or create a new one.
+- Select an existing receiver or create a new one.
+- Generate a receipt number.
+- Record transaction status.
+- Add notes.
+
+### Step 2: Sender information
+
+Record:
+
+- Sender name.
+- Sender mobile number.
+- Sender address, if required.
+- Sender city.
+- Sender country.
+
+### Step 3: Receiver information
+
+Record:
+
+- Receiver name.
+- Receiver mobile number.
+- Receiver address.
+- Receiver city.
+- Receiver province.
+- Receiver country.
+
+### Step 4: Financial calculations
+
+Support:
+
+- Amount in AED.
+- Exchange rate.
+- PKR equivalent.
+- Commission percentage.
+- Commission amount.
+- Additional charges.
+- Total collected amount.
+- Net amount payable to the receiver.
+
+Use the following basic conversion:
+
+PKR equivalent = AED amount × exchange rate.
+
+Commission = selected calculation base × commission percentage ÷ 100.
+
+Make the commission base configurable, such as the AED amount or the PKR equivalent.
+
+Clearly distinguish:
+
+- Amount received from the sender.
+- Commission earned.
+- Amount payable to the receiver.
+- Amount already paid.
+- Remaining payable balance.
+
+Never mix currencies or count the same money twice.
+
+Allow the admin to edit default exchange rates and commission percentages in Settings. Save the actual rate and calculation details on each transaction so that changing the default rate does not alter historical records.
+
+### Step 5: Transaction payments
+
+Allow one or multiple payouts.
+
+For each payout, record:
+
+- Payout ID.
+- Parent transaction ID.
+- Date.
+- Receiver.
+- Amount paid.
+- Currency.
+- Payment reference.
+- Notes.
+
+Automatically calculate the remaining balance.
+
+Prevent accidental duplicate payouts and overpayments.
+
+### Step 6: Transaction statuses
+
+Support:
+
+- Draft.
+- Received.
+- Partially paid.
+- Paid.
+- Completed.
+- Cancelled.
+
+Only mark a transaction completed when its obligations have been settled or an explicitly documented adjustment has been made.
+
+## 8. Khata System — Borrowed Money and Loans
+
+Build a separate Khata module for money lent to people and money returned by them.
+
+This is not the same as a money transfer or an Amanat deposit. Keep the records separate.
+
+### Example
+
+You lend PKR 100,000 to a person on 1 January.
+
+The person promises to return the money after three months.
+
+The system must record:
+
+- Borrower's name.
+- Mobile number.
+- Address.
+- Loan date.
+- Original amount.
+- Currency.
+- Expected return date.
+- Purpose or description.
+- Optional agreed terms.
+- Amount returned.
+- Remaining outstanding balance.
+- Loan status.
+
+### Repayments
+
+Allow the borrower to return money in installments.
+
+For each repayment, record:
+
+- Repayment ID.
+- Borrower.
+- Related loan.
+- Payment date.
+- Amount received.
+- Currency.
+- Payment method or reference.
+- Notes.
+- Receipt number.
+
+Automatically calculate:
+
+Outstanding balance = original loan amount + valid additions − repayments − valid adjustments.
+
+Do not include interest unless an explicitly configured and lawful business rule requires it.
+
+### Example
+
+Original loan: PKR 100,000.
+
+First repayment: PKR 20,000.
+
+Second repayment: PKR 30,000.
+
+Remaining balance: PKR 50,000.
+
+Display the complete repayment history and outstanding balance.
+
+### Loan statuses
+
+- Outstanding.
+- Partially repaid.
+- Fully repaid.
+- Overdue.
+- Cancelled or adjusted.
+
+### Additional features
+
+- Set repayment dates for one month, three months, six months, or a custom date.
+- Display upcoming repayment dates.
+- Highlight overdue loans.
+- Search borrowers by name or phone.
+- View all loans associated with a person.
+- Print loan receipts.
+- Generate a complete Khata statement.
+- Export loan records.
+
+Do not automatically mark a loan as repaid until its balance reaches zero or a documented adjustment settles it.
+
+## 9. Amanat System — Money Kept for Safekeeping
+
+Build a dedicated module for people who give you money to keep in your possession or account.
+
+The money may remain with you for days, weeks, or months. The owner may later deposit more, withdraw some, or ask you to send part of it to another person.
+
+This must work as a running ledger.
+
+### Example scenario
+
+A person gives you PKR 100,000 to keep.
+
+After one week, they give you another PKR 50,000.
+
+Later, they ask you to send PKR 70,000 to another person.
+
+The remaining balance is PKR 80,000.
+
+The system must show every entry that produced this balance.
+
+### Amanat account fields
+
+- Unique account ID.
+- Owner's name.
+- Mobile number.
+- Address.
+- City.
+- Currency.
+- Account opening date.
+- Opening balance, if applicable.
+- Notes.
+
+### Transaction types
+
+Provide the following operations:
+
+1. Initial deposit.
+2. Additional deposit.
+3. Partial withdrawal.
+4. Full withdrawal.
+5. Money sent to a third party.
+6. Money returned to the owner.
+7. Transfer between the owner's own ledger accounts, if required.
+8. Correction or adjustment with a documented reason.
+
+### Every ledger entry must include
+
+- Unique entry ID.
+- Account owner.
+- Date and time.
+- Transaction type.
+- Amount.
+- Currency.
+- Description.
+- Related person or third-party recipient.
+- Previous balance.
+- Amount added or deducted.
+- New balance.
+- Receipt number.
+- Optional notes.
+
+### Balance calculation
+
+For each currency separately:
+
+New balance = previous balance + deposits − withdrawals − third-party payments + valid additions or adjustments.
+
+Prevent withdrawals and payments exceeding the available balance unless the admin explicitly records a separately documented exception.
+
+Do not combine AED and PKR balances without a recorded conversion transaction.
+
+### Important distinction
+
+An Amanat is money held on behalf of its owner. It must not be counted as business revenue or commission.
+
+A loan is money lent to a borrower and expected to be returned.
+
+A money transfer is a separate transaction involving a sender and receiver.
+
+Keep these three categories separate throughout the dashboard, reports, and statements.
+
+### Amanat statements
+
+For every owner, show:
+
+- Opening balance.
+- All deposits.
+- All withdrawals.
+- Third-party payments.
+- Current balance.
+- Complete chronological ledger.
+- Printable statement.
+- PDF statement.
+
+## 10. Cash and Account Ledger
+
+Provide a simple internal cash and account movement ledger to help the admin understand where recorded money has gone.
+
+Support separately tracked entries for:
+
+- Cash received.
+- Cash paid out.
+- Money held for safekeeping.
+- Money lent to borrowers.
+- Loan repayments received.
+- Money returned to depositors.
+- Business commission income.
+- Other documented adjustments.
+
+Do not treat customer-owned Amanat funds as business income.
+
+Avoid automatically assuming that every money transfer is a bank deposit. Allow the admin to describe the actual transaction or payment method.
+
+The ledger must clearly distinguish customer liabilities, loans receivable, business income, and money-transfer obligations.
+
+This is an internal record-keeping ledger, not a regulated accounting or banking system.
+
+## 11. Receipt System — Use the Uploaded Reference Images
+
+Use both uploaded receipt images as design references.
+
+Create two distinct receipt layouts, plus the initial, payout, and final receipts required for money transfers.
+
+### Receipt format A: Individual Urdu cash/transaction receipt
+
+Use the reference with the large transaction details, date, transaction number, amount, customer code, and running balance.
+
+Include:
+
+- Business name.
+- Receipt number.
+- Transaction number.
+- Date and time.
+- Sender/customer name.
+- Sender phone.
+- Receiver name.
+- Receiver phone.
+- Customer code.
+- Description.
+- AED amount.
+- PKR equivalent.
+- Exchange rate.
+- Commission, when relevant.
+- Previous balance, when relevant.
+- Current balance.
+- Signature space.
+
+Use a clear bordered layout with aligned fields and currency values.
+
+### Receipt format B: Urdu transaction register-style receipt
+
+Use the second reference image, which shows transaction rows in a register-style format.
+
+Allow the admin to select multiple relevant transactions for a daily or account statement.
+
+Display:
+
+- Transaction or reference number.
+- Date.
+- Sender.
+- Receiver.
+- Currency.
+- AED amount.
+- Exchange rate.
+- PKR equivalent.
+- Number of transactions.
+- Total AED.
+- Total PKR.
+- Applicable notes.
+
+Ensure each row is readable and correctly aligned in Urdu RTL mode.
+
+### Receipt format C: Initial money-transfer receipt
+
+Issue a receipt when a sender's money is recorded as received.
+
+Include the sender, receiver, amount, exchange rate, commission, and expected payable amount where applicable.
+
+### Receipt format D: Individual payout receipt
+
+Issue a separate receipt for every payout to the receiver.
+
+Show the payout amount, date, parent transaction number, previous payouts, and remaining balance.
+
+### Receipt format E: Final transaction slip
+
+Generate a final slip when the transaction has been fully settled.
+
+Show the complete transfer summary, total collected, commission, total payable, all payouts, and final remaining balance.
+
+### Receipt format F: Khata and Amanat receipts
+
+Support receipts for:
+
+- Money lent.
+- Loan repayment.
+- Amanat deposit.
+- Additional deposit.
+- Partial withdrawal.
+- Full withdrawal.
+- Third-party payment.
+- Final settlement.
+
+Use the correct receipt type and terminology for each transaction.
+
+### Business settings on receipts
+
+Allow the admin to configure:
+
+- Business name.
+- Business address.
+- City.
+- Phone number.
+- Optional logo.
+- Receipt footer.
+- Signature space.
+- Receipt numbering format.
+
+Do not hardcode business details throughout the application.
+
+## 12. Printing, PDF, and WhatsApp Sharing
+
+Every relevant receipt and statement must have working controls for:
+
+- Print.
+- Download PDF.
+- Share through WhatsApp.
+- View full statement.
+- Return to transaction.
+
+### Printing requirements
+
+- Use a clean print layout.
+- Hide the sidebar, dashboard, navigation, and action buttons.
+- Avoid blank pages.
+- Preserve table borders and currency alignment.
+- Support A4 and compact receipt layouts where appropriate.
+- Support both English and Urdu.
+- Keep receipt numbers and transaction references clearly visible.
+
+### PDF requirements
+
+- Generate a real downloadable PDF, not just a renamed image.
+- Support proper Urdu text shaping and right-to-left rendering.
+- Embed a suitable Urdu font where possible.
+- Preserve text readability and financial figures.
+- Keep the receipt or statement layout consistent with the print preview.
+
+### WhatsApp requirements
+
+Provide a WhatsApp share action that opens a suitable share flow.
+
+If direct PDF attachment is unavailable, download the PDF and clearly instruct the user to attach it manually in WhatsApp.
+
+Do not claim that a receipt was sent unless it was actually sent.
+
+Do not create publicly accessible links containing private customer information.
+
+## 13. Complete History and Search
+
+Create a unified search system without merging the different financial categories into one ambiguous balance.
+
+Allow the admin to search by:
+
+- Customer name.
+- Mobile number.
+- Receiver name.
+- Transaction ID.
+- Receipt number.
+- Customer code.
+- Borrower name.
+- Amanat owner.
+- Date range.
+- Year.
+- Transaction type.
+
+Each customer profile should show separate tabs for:
+
+- Money transfers.
+- Loans and repayments.
+- Amanat deposits and withdrawals.
+- Receipts and statements.
+
+Display every entry chronologically and show its current status.
+
+Allow the admin to open the original record, view its receipt, and print a statement.
+
+## 14. Yearly Reports
+
+Build yearly and monthly reports for all modules.
+
+### Money-transfer reports
+
+- Total AED received.
+- Total PKR equivalent.
+- Total commission.
+- Total payouts.
+- Outstanding payout balances.
+- Completed and pending transactions.
+
+### Khata reports
+
+- Total amount lent.
+- Total repayments.
+- Outstanding loan balances.
+- Overdue amounts.
+- Loans due during a selected period.
+
+### Amanat reports
+
+- Total deposits.
+- Total withdrawals.
+- Total third-party payments.
+- Current outstanding owner balances.
+- Individual depositor statements.
+
+### Cash and account reports
+
+- Recorded cash received.
+- Recorded cash paid.
+- Business commission income.
+- Customer-owned funds held.
+- Loans receivable.
+- Other adjustments.
+
+Provide date filters, yearly filters, searchable tables, and printable summaries.
+
+Allow CSV export for further analysis in spreadsheet software.
+
+All reports must derive from actual saved records.
+
+Keep currencies separate and clearly identify the currency of every figure.
+
+## 15. Settings
+
+Create a settings page with:
+
+- Business name.
+- Address and city.
+- Business phone.
+- Logo.
+- Default exchange rate.
+- Default commission percentage.
+- Commission calculation basis.
+- Receipt numbering.
+- Default language.
+- Date format.
+- Urdu and English receipt preferences.
+- Data export.
+- Data import.
+- Clear demo data.
+- Browser-storage information.
+
+Changes to default rates must not alter existing transaction calculations.
+
+Require confirmation before destructive operations.
+
+Clearly distinguish demo data from real records.
+
+## 16. Financial Calculation Rules
+
+Centralize all financial calculations in tested utility functions.
+
+Use reliable monetary precision. Do not rely on unrestricted JavaScript floating-point arithmetic for money.
+
+Keep original amounts, exchange rates, commission settings, payouts, and ledger entries.
+
+Calculate balances from recorded transactions instead of allowing users to type an arbitrary calculated balance.
+
+Use documented adjustments and reversals for corrections. Do not silently overwrite important financial history.
+
+Never combine AED and PKR in one total without an explicit exchange-rate conversion.
+
+For all modules, validate that:
+
+- Payouts do not exceed the payable balance.
+- Loan repayments do not create an unexplained negative balance.
+- Amanat withdrawals do not exceed the available balance.
+- Completed transfers have no unexplained outstanding balance.
+- Currency labels match the recorded amounts.
+- Historical transactions preserve their original calculation values.
+
+## 17. Prototype Data and Future Database Migration
+
+For this first version, use localStorage only.
+
+Create a storage abstraction with methods such as:
+
+- `getCustomers()`
+- `saveCustomer()`
+- `getTransactions()`
+- `saveTransaction()`
+- `getLoans()`
+- `saveLoan()`
+- `getLoanRepayments()`
+- `saveLoanRepayment()`
+- `getAmanatAccounts()`
+- `saveAmanatAccount()`
+- `getLedgerEntries()`
+- `saveLedgerEntry()`
+- `getReceipts()`
+- `exportAllData()`
+- `importAllData()`
+
+Adapt the interface to a consistent service layer instead of placing storage logic throughout React components.
+
+Use unique IDs and validate imported records.
+
+Provide an export format that can be migrated to a real database later.
+
+Do not connect an external database during this stage.
+
+Important: localStorage is suitable for a prototype, but it is not a secure, shared, cloud-backed financial database. It does not automatically synchronize between devices and can be lost if browser data is cleared. Clearly explain this limitation in the application.
+
+## 18. Required Screens
+
+Build the following complete screens:
+
+1. Dashboard.
+2. Customers.
+3. Add/Edit Customer.
+4. Receivers.
+5. New Money Transfer.
+6. Transfer Details.
+7. Payout Management.
+8. Transaction History.
+9. Khata Overview.
+10. Add Loan.
+11. Loan Details.
+12. Record Repayment.
+13. Amanat Overview.
+14. Open Amanat Account.
+15. Record Deposit.
+16. Record Withdrawal.
+17. Third-Party Payment.
+18. Ledger Details.
+19. Receipt Preview.
+20. Print/PDF Statement.
+21. Yearly Reports.
+22. Business Settings.
+23. Language Preferences.
+
+Use reusable components to avoid duplicating forms and calculation logic.
+
+## 19. Testing and Quality Assurance
+
+Test the following workflows:
+
+### Money transfer
+
+Create a transfer for AED 1,000 with an exchange rate of PKR 75 per AED.
+
+Expected PKR equivalent: PKR 75,000 before commission or additional charges.
+
+Record a partial payout of PKR 25,000 and verify that the remaining payable amount is calculated according to the configured transaction rules.
+
+### Khata
+
+Record a loan of PKR 100,000.
+
+Record repayments of PKR 20,000 and PKR 30,000.
+
+Expected outstanding loan balance: PKR 50,000.
+
+### Amanat
+
+Record a deposit of PKR 100,000.
+
+Add another deposit of PKR 50,000.
+
+Record a third-party payment of PKR 70,000.
+
+Expected remaining balance: PKR 80,000.
+
+### Language switching
+
+Open every screen in English, then switch to Urdu.
+
+Verify that all visible text, controls, dialogs, messages, tables, and receipts are translated and correctly aligned RTL.
+
+Switch back to English and confirm that the interface returns to LTR without changing financial data.
+
+### Data persistence
+
+Refresh the browser and confirm that saved prototype records remain available.
+
+Export the records, clear the demo data, and test importing the exported data.
+
+### Receipts
+
+Generate, print, and download PDFs for money transfers, payouts, loan repayments, Amanat deposits, withdrawals, and final statements.
+
+Inspect Urdu text shaping, layout, and financial totals.
+
+## 20. Final Implementation Instructions
+
+Build the actual working React application now.
+
+Do not respond with a plan alone. Implement the screens, forms, navigation, calculations, state management, localStorage persistence, receipt templates, language switching, print functionality, and PDF downloads.
+
+Start with the project structure and translation system, then implement the financial modules and their reusable components.
+
+Prioritize:
+
+1. Complete Urdu and English support.
+2. Correct RTL layout and natural Urdu wording.
+3. Accurate financial calculations.
+4. Separate money-transfer, Khata, and Amanat records.
+5. Working receipt generation.
+6. Reliable prototype persistence.
+7. Clear and simple user experience.
+
+Do not connect any external database yet.
+
+Do not create fake working buttons or pretend that data has been saved to a cloud service.
+
+The final application must be clean, professional, easy to use, and ready for a later database integration stage.

@@ -417,7 +417,9 @@ export const ReceiptViewerModal: React.FC = () => {
     formatMoney,
     showToast,
     customers,
+    transfers,
     amanatAccounts,
+    loans,
     stations,
     isSuperAdmin,
     canEditTransfers
@@ -430,22 +432,97 @@ export const ReceiptViewerModal: React.FC = () => {
   const [paperSize, setPaperSize] = useState<'A4' | 'A5'>('A4');
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
 
-  const transfer = receiptModal.transfer;
+  const transfer = receiptModal.transfer
+    ? transfers.find(tr => tr.id === receiptModal.transfer?.id) || receiptModal.transfer
+    : undefined;
   const payout = receiptModal.payout;
-  const loan = receiptModal.loan;
-  const amanatAccount = receiptModal.amanatAccount;
-  const amanatEntry = receiptModal.amanatEntry;
+  const loan = receiptModal.loan
+    ? loans.find(l => l.id === receiptModal.loan?.id) || receiptModal.loan
+    : undefined;
+  const repayment = receiptModal.repayment
+    ? loan?.repayments?.find(r => r.id === receiptModal.repayment?.id) || receiptModal.repayment
+    : undefined;
+  const amanatAccount = receiptModal.amanatAccount
+    ? amanatAccounts.find(a => a.id === receiptModal.amanatAccount?.id) || receiptModal.amanatAccount
+    : undefined;
+  const amanatEntry = receiptModal.amanatEntry
+    ? amanatAccount?.entries?.find(e => e.id === receiptModal.amanatEntry?.id) || receiptModal.amanatEntry
+    : undefined;
   const depositEntry = receiptModal.depositEntry;
   const batchTransfers = receiptModal.batchTransfers || (transfer ? [transfer] : []);
   const batchLoans = receiptModal.batchLoans || (loan ? [loan] : []);
   const batchAmanat = receiptModal.batchAmanat || (amanatAccount ? [amanatAccount] : []);
   const reportTitle = receiptModal.reportTitle;
   const reportDateRange = receiptModal.reportDateRange;
+  const customer = receiptModal.customer
+    ? customers.find(c => c.id === receiptModal.customer?.id) || receiptModal.customer
+    : undefined;
+  const customerTransfers = receiptModal.customerTransfers || (customer
+    ? transfers.filter(
+        tr =>
+          tr.senderId === customer.id ||
+          tr.senderPhone === customer.phone ||
+          tr.senderName.trim().toLowerCase() === customer.name.trim().toLowerCase()
+      )
+    : []);
+  const customerLoans = receiptModal.customerLoans || (customer
+    ? loans.filter(
+        l =>
+          l.borrowerName.trim().toLowerCase() === customer.name.trim().toLowerCase() ||
+          (l.borrowerPhone && customer.phone && l.borrowerPhone === customer.phone)
+      )
+    : []);
+  const customerAmanat = receiptModal.customerAmanat || (customer
+    ? amanatAccounts.find(
+        a =>
+          a.id === customer.id ||
+          a.ownerPhone === customer.phone ||
+          a.ownerName.trim().toLowerCase() === customer.name.trim().toLowerCase() ||
+          a.accountNo === customer.customerCode
+      )
+    : undefined);
+
+  const toUrduPaymentMethod = (method?: string, bankName?: string): string => {
+    if (!method || method === 'Cash') return 'نقد (کیش)';
+    if (method === 'Bank Transfer' || method === 'Bank') return bankName ? `بینک ٹرانسفر (${bankName})` : 'بینک ٹرانسفر';
+    if (method === 'EasyPaisa') return 'ایزی پیسہ';
+    if (method === 'JazzCash') return 'جاز کیش';
+    if (method === 'NayaPay') return 'نیا پے';
+    if (method === 'SadaPay') return 'سدا پے';
+    if (method === 'Raast') return 'راست آئی ڈی';
+    if (method === 'Cheque') return 'چیک';
+    if (method === 'Other') return 'دیگر طریقہ';
+    return bankName ? `${method} (${bankName})` : method;
+  };
+
+  const toClearUrduDescription = (desc: string | undefined, fallbackUr: string): string => {
+    if (!desc || !desc.trim()) return fallbackUr;
+    const normalized = desc.trim().toLowerCase();
+    const map: Record<string, string> = {
+      'cash return': 'نقد رقم واپسی (کیش واپسی)',
+      'cash deposit': 'نقد رقم جمع (کیش جمع)',
+      'initial cash safekeeping deposit': 'ابتدائی نقد امانت / کیش جمع',
+      'added additional safekeeping funds': 'مزید نقد امانت / کیش جمع',
+      'returned partial cash to owner': 'کھاتہ دار کو جزوی نقد رقم واپسی',
+      'returned full cash balance to owner': 'کھاتہ دار کو مکمل بقایا رقم واپسی',
+      'emergency medical & family support': 'ضروری گھریلو و علاج معالجہ اخراجات',
+      'partial cash repayment at dubai office': 'دبئی آفس میں جزوی نقد قسط وصولی',
+      'house construction installment': 'مکان کی تعمیر کے لیے قرض',
+      'travel & visa expenses': 'سفر اور ویزہ اخراجات کے لیے قرض',
+      'full settlement received via bank transfer': 'بینک ٹرانسفر کے ذریعے مکمل قرضہ وصولی',
+      'additional loan given': 'مزید قرض / ادھار رقم دی گئی',
+      'repayment received': 'قرضہ واپسی / قسط وصول شدہ'
+    };
+    return map[normalized] || desc;
+  };
+
+  const isStationReceipt = Boolean(transfer || depositEntry);
+  const isIndividualKhataReceipt = Boolean((amanatAccount || amanatEntry || loan || repayment) && !transfer && !depositEntry);
 
   const businessName = language === 'ur' ? settings.businessNameUr : settings.businessNameEn;
   const branchName = language === 'ur' ? settings.branchUr : settings.branchEn;
 
-  // Resolve customer account details and khata balances for Money Transfer & Cash Jama (Universal Format A)
+  // Resolve customer account details for Money Transfer & Individual Khata
   const senderCustomer = transfer
     ? customers.find(
         c =>
@@ -461,21 +538,12 @@ export const ReceiptViewerModal: React.FC = () => {
       )
     : undefined;
 
-  const matchedAmanat = transfer
-    ? amanatAccounts.find(
-        a =>
-          a.ownerName.trim().toLowerCase() === transfer.senderName.trim().toLowerCase() ||
-          (a.ownerPhone && transfer.senderPhone && a.ownerPhone === transfer.senderPhone) ||
-          (senderCustomer &&
-            (a.ownerName.trim().toLowerCase() === senderCustomer.name.trim().toLowerCase() ||
-              a.id === senderCustomer.id))
-      )
-    : amanatAccount;
-
   const customerCodeNumber = senderCustomer?.customerCode
     ? senderCustomer.customerCode.replace(/^CUST-?/i, '')
     : amanatAccount?.accountNo
     ? amanatAccount.accountNo.replace(/^AMN-?/i, '')
+    : loan?.loanNo
+    ? loan.loanNo.replace(/^LN-?/i, '')
     : depositEntry?.receiptNo
     ? depositEntry.receiptNo.replace(/^DEP-?/i, '')
     : transfer?.senderId
@@ -523,38 +591,36 @@ export const ReceiptViewerModal: React.FC = () => {
   ) : amanatAccount ? (
     <span className="inline-flex flex-wrap items-baseline gap-1.5">
       <span dir="auto" style={{ unicodeBidi: 'isolate' }}>
-        {amanatEntry?.description ||
-          (amanatEntry?.type === 'additional_deposit'
-            ? 'پیسہ جمع شدگی امانت (نقد کیش)'
+        {toClearUrduDescription(
+          amanatEntry?.description,
+          amanatEntry?.type === 'additional_deposit'
+            ? 'انفرادی کھاتہ — پیسہ جمع شدگی (نقد کیش)'
             : amanatEntry?.type === 'initial_deposit'
-            ? 'پیسہ جمع شدگی ابتدائی اکاؤنٹ (نقد کیش)'
-            : 'پیسہ جمع سے رقم واپسی / ادائیگی')}
+            ? 'انفرادی کھاتہ — ابتدائی پیسہ جمع شدگی (نقد کیش)'
+            : 'انفرادی کھاتہ — پیسہ جمع سے رقم واپسی / ادائیگی'
+        )}
       </span>
       {amanatEntry?.relatedPerson ? (
-        <span dir="auto" style={{ unicodeBidi: 'isolate' }}>
-          : {amanatEntry.relatedPerson}
+        <span dir="rtl" className="inline-block whitespace-nowrap font-bold" style={{ unicodeBidi: 'isolate' }}>
+          ({amanatEntry.type === 'initial_deposit' || amanatEntry.type === 'additional_deposit' ? 'جمع کرانے والا: ' : 'وصول کنندہ: '}
+          {amanatEntry.relatedPerson})
         </span>
       ) : null}
       {amanatEntry?.paymentMethod ? (
         <span dir="rtl" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
-          [{amanatEntry.paymentMethod === 'Cash' ? 'نقد کیش' : amanatEntry.bankName || amanatEntry.paymentMethod}]
+          [{toUrduPaymentMethod(amanatEntry.paymentMethod, amanatEntry.bankName)}]
         </span>
       ) : null}
     </span>
   ) : depositEntry ? (
     <span className="inline-flex flex-wrap items-baseline gap-1.5">
       <span dir="auto" style={{ unicodeBidi: 'isolate' }}>
-        {depositEntry.description || 'اسٹیشن کاؤنٹر کیش ڈپازٹ'}
+        {toClearUrduDescription(depositEntry.description, 'اسٹیشن کاؤنٹر کیش ڈپازٹ')}
       </span>
       {(depositEntry.bankName || depositEntry.paymentMethod) && (
-        <span dir="auto" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
-          [{depositEntry.paymentMethod === 'Cash'
-            ? 'نقد کیش'
-            : `${depositEntry.paymentMethod || 'Bank Transfer'}${
-                depositEntry.bankName && depositEntry.bankName !== depositEntry.paymentMethod
-                  ? `: ${depositEntry.bankName}`
-                  : ''
-              }${depositEntry.accountNumber ? ` - ${depositEntry.accountNumber}` : ''}`}]
+        <span dir="rtl" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
+          [{toUrduPaymentMethod(depositEntry.paymentMethod, depositEntry.bankName)}
+          {depositEntry.accountNumber ? ` - ${depositEntry.accountNumber}` : ''}]
         </span>
       )}
       <span dir="rtl" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
@@ -564,11 +630,29 @@ export const ReceiptViewerModal: React.FC = () => {
   ) : loan ? (
     <span className="inline-flex flex-wrap items-baseline gap-1.5">
       <span dir="auto" style={{ unicodeBidi: 'isolate' }}>
-        {loan.purpose || 'کھاتہ ادھار ریکارڈ'}
+        {repayment
+          ? toClearUrduDescription(
+              repayment.notes,
+              repayment.entryType === 'additional_loan'
+                ? 'انفرادی کھاتہ — مزید قرض / ادھار رقم دی گئی'
+                : 'انفرادی کھاتہ — قرضہ واپسی / رقم جمع وصول شدہ'
+            )
+          : toClearUrduDescription(loan.purpose, 'انفرادی کھاتہ ادھار / قرضہ ریکارڈ')}
       </span>
-      <span dir="rtl" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
-        (میعاد: {loan.dueDate})
-      </span>
+      {repayment?.receivedBy ? (
+        <span dir="rtl" className="inline-block whitespace-nowrap font-bold" style={{ unicodeBidi: 'isolate' }}>
+          ({repayment.entryType === 'additional_loan' ? 'وصول کنندہ: ' : 'جمع کرانے والا: '}{repayment.receivedBy})
+        </span>
+      ) : null}
+      {repayment?.paymentMethod ? (
+        <span dir="rtl" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
+          [{toUrduPaymentMethod(repayment.paymentMethod)}]
+        </span>
+      ) : loan.dueDate ? (
+        <span dir="rtl" className="inline-block whitespace-nowrap" style={{ unicodeBidi: 'isolate' }}>
+          (واپسی کی تاریخ: {loan.dueDate})
+        </span>
+      ) : null}
     </span>
   ) : (
     '—'
@@ -605,16 +689,17 @@ export const ReceiptViewerModal: React.FC = () => {
     slipAmountPKR = depositEntry.amountPKR;
     slipAmountAED = Math.round(depositEntry.amountPKR / normalizedRate);
   } else if (loan) {
+    const loanTxnAmount = repayment ? repayment.amount : loan.originalAmount;
     if (loan.currency === 'AED') {
-      slipAmountAED = loan.originalAmount;
-      slipAmountPKR = Math.round(loan.originalAmount * normalizedRate);
+      slipAmountAED = loanTxnAmount;
+      slipAmountPKR = Math.round(loanTxnAmount * normalizedRate);
     } else {
-      slipAmountPKR = loan.originalAmount;
-      slipAmountAED = Math.round(loan.originalAmount / normalizedRate);
+      slipAmountPKR = loanTxnAmount;
+      slipAmountAED = Math.round(loanTxnAmount / normalizedRate);
     }
   }
 
-  // Resolve Station / Account previous and current running balances (supporting negative / minus overdraft & deposit deduction)
+  // Resolve Station / Account previous and current running balances
   const matchedStation = transfer
     ? stations.find(
         s =>
@@ -672,27 +757,37 @@ export const ReceiptViewerModal: React.FC = () => {
     } else if (matchedStation) {
       curBal = matchedStation.currentBalancePKR || 0;
       prevBal = curBal + (transfer.netPayablePKR || transfer.amountPKR || 0);
-    } else if (matchedAmanat) {
-      curBal = matchedAmanat.currentBalance;
-      prevBal = curBal + (transfer.amountAED || 0);
     } else {
       curBal = 0;
       prevBal = transfer.netPayablePKR || transfer.amountPKR || 0;
     }
   } else if (loan) {
-    curBal = loan.remainingBalance;
-    prevBal = loan.originalAmount;
+    if (repayment) {
+      curBal =
+        repayment.newBalance !== undefined
+          ? repayment.newBalance
+          : loan.remainingBalance;
+      prevBal =
+        repayment.previousBalance !== undefined
+          ? repayment.previousBalance
+          : repayment.entryType === 'additional_loan'
+          ? curBal - repayment.amount
+          : curBal + repayment.amount;
+    } else {
+      curBal = loan.remainingBalance;
+      prevBal = loan.originalAmount;
+    }
   }
 
   const slipStation =
     transfer?.station ||
-    amanatAccount?.city ||
     depositEntry?.stationName ||
-    'میرعلی';
+    '';
 
   const slipAddress =
     transfer?.receiverAddress ||
     amanatAccount?.ownerAddress ||
+    loan?.borrowerAddress ||
     settings.addressUr ||
     'پشاور';
 
@@ -700,6 +795,7 @@ export const ReceiptViewerModal: React.FC = () => {
     transfer?.receiverPhone ||
     transfer?.senderPhone ||
     amanatAccount?.ownerPhone ||
+    loan?.borrowerPhone ||
     settings.phoneEn ||
     '09987878';
 
@@ -709,6 +805,8 @@ export const ReceiptViewerModal: React.FC = () => {
     ? formatSlipDateTime(amanatEntry.date)
     : depositEntry
     ? formatSlipDateTime(depositEntry.date)
+    : repayment
+    ? formatSlipDateTime(repayment.date)
     : loan
     ? formatSlipDateTime(loan.loanDate)
     : formatSlipDateTime(new Date().toISOString().split('T')[0]);
@@ -718,10 +816,28 @@ export const ReceiptViewerModal: React.FC = () => {
     amanatEntry?.receiptNo ||
     amanatAccount?.accountNo ||
     depositEntry?.receiptNo ||
+    repayment?.receiptNo ||
     loan?.loanNo ||
     '10965-2026';
 
-  const badgeTitle = settings.receiptHeaderTitleUr || 'رسید آرڈر';
+  const badgeTitle =
+    (amanatAccount || amanatEntry) && !transfer
+      ? amanatEntry &&
+        (amanatEntry.type === 'partial_withdrawal' ||
+          amanatEntry.type === 'full_withdrawal' ||
+          amanatEntry.type === 'returned_to_owner' ||
+          amanatEntry.type === 'third_party_payment')
+        ? 'رسید پیسہ واپسی (انفرادی کھاتہ)'
+        : 'رسید پیسہ جمع (انفرادی کھاتہ)'
+      : loan && !transfer
+      ? repayment
+        ? repayment.entryType === 'additional_loan'
+          ? 'رسید مزید قرضہ (انفرادی کھاتہ)'
+          : 'رسید قرضہ واپسی (انفرادی کھاتہ)'
+        : 'رسید قرضہ / ادھار (انفرادی کھاتہ)'
+      : depositEntry
+      ? 'رسید اسٹیشن کیش جمع'
+      : settings.receiptHeaderTitleUr || 'رسید آرڈر';
   const customerLabelUr = settings.receiptCustomerLabelUr || 'مصفح کسٹمر نمبر';
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -736,29 +852,41 @@ export const ReceiptViewerModal: React.FC = () => {
 
   useEffect(() => {
     if (receiptModal.isOpen) {
-      if (receiptModal.format === 'G') {
+      if (receiptModal.format === 'J') {
+        setActiveFormat('J');
+        setOrientation('landscape');
+      } else if (receiptModal.format === 'I') {
+        setActiveFormat('I');
+        setOrientation('landscape');
+      } else if (receiptModal.format === 'G' && receiptModal.batchAmanat && receiptModal.batchAmanat.length > 0) {
         setActiveFormat('G');
-      } else if (receiptModal.format === 'H') {
+        setOrientation('landscape');
+      } else if (receiptModal.format === 'H' && receiptModal.batchLoans && receiptModal.batchLoans.length > 0) {
         setActiveFormat('H');
+        setOrientation('landscape');
       } else if (receiptModal.format === 'B') {
         setActiveFormat('B');
+        setOrientation('landscape');
       } else if (receiptModal.format === 'E') {
         setActiveFormat('E');
+        setOrientation('landscape');
       } else {
-        setActiveFormat('A');
+        setActiveFormat(receiptModal.format || 'A');
+        setOrientation(receiptModal.format === 'A' ? 'portrait' : 'landscape');
       }
 
       setPaperSize('A4');
-      setOrientation('landscape');
       setConfirmDelete(false);
     }
   }, [
     receiptModal.format,
     receiptModal.isOpen,
     receiptModal.transfer,
+    receiptModal.customer,
     receiptModal.batchTransfers,
     receiptModal.batchLoans,
     receiptModal.batchAmanat,
+    receiptModal.amanatAccount,
     receiptModal.depositEntry,
     receiptModal.filterStation
   ]);
@@ -783,7 +911,7 @@ export const ReceiptViewerModal: React.FC = () => {
     );
   };
 
-  const isWideRegisterFormat = activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H';
+  const isWideRegisterFormat = activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || activeFormat === 'I' || activeFormat === 'J';
 
   // Print handler - direct, instant native browser print
   const handlePrint = () => {
@@ -806,7 +934,7 @@ export const ReceiptViewerModal: React.FC = () => {
         'info'
       );
 
-      const isRtl = activeFormat === 'A' || activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || language === 'ur';
+      const isRtl = activeFormat === 'A' || activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || activeFormat === 'I' || activeFormat === 'J' || language === 'ur';
 
       // Use wider canvas for multi-column Station Order List / Register sheets
       const targetWidth = isWideRegisterFormat ? 1040 : 720;
@@ -907,7 +1035,9 @@ export const ReceiptViewerModal: React.FC = () => {
 
       const refNo =
         reportTitle ||
-        (activeFormat === 'G'
+        (activeFormat === 'J'
+          ? `Customer_Statement_${customer?.name || 'Customer'}_${customer?.customerCode || 'Code'}`
+          : activeFormat === 'G'
           ? 'Cash_Jama_Register'
           : activeFormat === 'H'
           ? 'Khata_Register'
@@ -965,11 +1095,48 @@ export const ReceiptViewerModal: React.FC = () => {
       <div className={`receipt-modal-card bg-white rounded-2xl shadow-2xl ${isWideRegisterFormat ? 'max-w-6xl' : 'max-w-4xl'} w-full my-4 sm:my-8 border border-slate-200 flex flex-col overflow-visible`}>
         {/* Top Controls Bar - Clean, minimal, zero confusion */}
         <div className="no-print sticky top-0 z-20 bg-white text-slate-900 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 rounded-t-2xl shadow-xs">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-base sm:text-lg text-slate-950 font-urdu-heading">
-              {language === 'ur' ? 'رسید آرڈر و پرنٹ' : 'Receipt Slip & Print'}
-            </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <h3 className="font-bold text-base sm:text-lg text-slate-950 font-urdu-heading">
+                {language === 'ur' ? 'رسید آرڈر و پرنٹ' : 'Receipt Slip & Print'}
+              </h3>
+            </div>
+
+            {amanatAccount && !transfer && !loan && (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300 text-xs font-bold font-urdu-heading">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormat('I');
+                    setOrientation('landscape');
+                  }}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                    activeFormat === 'I'
+                      ? 'bg-slate-950 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'ur' ? 'کھاتہ اسٹیٹمنٹ' : 'Khata Statement'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormat('A');
+                    setOrientation('portrait');
+                  }}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                    activeFormat === 'A'
+                      ? 'bg-slate-950 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{language === 'ur' ? 'انفرادی رسید واؤچر' : 'Single Slip'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Action buttons */}
@@ -1219,12 +1386,11 @@ export const ReceiptViewerModal: React.FC = () => {
                         'ایگل اسٹار برانڈ - پیسہ جمع و تحویل میں رکھی گئی رقم بوقت ضرورت فوری قابل واپسی ہے۔'
                       )}
                     </p>
-                    <p className="text-[10px] text-slate-700 font-bold" dir="ltr">
-                      {resolveBrandText(
-                        settings.receiptFooterCashJamahEn || settings.receiptFooterEn,
-                        'Thank you for trusting Eagle Star Brand Cash Jamah Safekeeping. Funds available on demand.'
-                      )}
-                    </p>
+                    {settings.receiptFooterCashJamahEn && (
+                      <p className="text-[10px] text-slate-700 font-bold" dir="ltr">
+                        {resolveBrandText(settings.receiptFooterCashJamahEn)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex justify-between items-end pt-2 text-xs">
                     <div className="text-center">
@@ -1334,7 +1500,7 @@ export const ReceiptViewerModal: React.FC = () => {
                               {ln.loanDate}
                             </td>
                             <td className="border border-slate-300 py-2 px-2 font-mono text-rose-700 text-center font-bold">
-                              {ln.dueDate}
+                              {ln.dueDate || '—'}
                             </td>
                             <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-slate-900">
                               {ln.originalAmount.toLocaleString()} {ln.currency}
@@ -1393,12 +1559,11 @@ export const ReceiptViewerModal: React.FC = () => {
                         'ایگل اسٹار برانڈ - ادھار کھاتہ و قرضہ واپسی باقاعدگی سے ادا کریں۔ آپ کے تعاون کا شکریہ!'
                       )}
                     </p>
-                    <p className="text-[10px] text-slate-700 font-bold" dir="ltr">
-                      {resolveBrandText(
-                        settings.receiptFooterLoanEn || settings.receiptFooterEn,
-                        'Eagle Star Brand - Please settle credit khata dues on agreed due date. Thank you.'
-                      )}
-                    </p>
+                    {settings.receiptFooterLoanEn && (
+                      <p className="text-[10px] text-slate-700 font-bold" dir="ltr">
+                        {resolveBrandText(settings.receiptFooterLoanEn)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex justify-between items-end pt-2 text-xs">
                     <div className="text-center">
@@ -2068,6 +2233,727 @@ export const ReceiptViewerModal: React.FC = () => {
                   </div>
                 );
               })()
+            ) : activeFormat === 'I' && amanatAccount ? (
+              /* FORMAT I: INDIVIDUAL CASH JAMA CUSTOMER STATEMENT (DATE-WISE KHATA AUDIT & TRANSACTIONS) */
+              (() => {
+                const entriesToRender =
+                  receiptModal.filteredAmanatEntries && receiptModal.filteredAmanatEntries.length > 0
+                    ? receiptModal.filteredAmanatEntries
+                    : amanatAccount.entries || [];
+                const totalDeposited = entriesToRender
+                  .filter(e => e.type === 'initial_deposit' || e.type === 'additional_deposit')
+                  .reduce((sum, e) => sum + e.amount, 0);
+                const totalWithdrawn = entriesToRender
+                  .filter(e => e.type !== 'initial_deposit' && e.type !== 'additional_deposit')
+                  .reduce((sum, e) => sum + e.amount, 0);
+                const currentBal = amanatAccount.currentBalance;
+                const acctCurrency = amanatAccount.currency || 'PKR';
+
+                return (
+                  <div className="space-y-5 text-slate-900" dir="rtl">
+                    {/* Header with Eagle Star Branding */}
+                    <div className="border-b-2 border-slate-900 pb-3">
+                      <div className="flex flex-col sm:flex-row items-center justify-between pb-2 mb-2 border-b border-slate-200 gap-2">
+                        <EagleStarLogo
+                          variant="print"
+                          size="sm"
+                          showSubtitle={true}
+                          customNameEn={settings.businessNameEn}
+                          customNameUr={settings.businessNameUr}
+                          customSubtitle={settings.branchEn}
+                          customLogoUrl={settings.customLogoUrl}
+                        />
+                        <div className="text-right sm:text-left text-[11px] text-slate-700 font-mono space-y-0.5" dir="ltr">
+                          <p className="font-bold text-slate-900">{settings.branchEn || branchName}</p>
+                          {settings.branchUr && (
+                            <p className="font-bold text-slate-900 font-musaffah-title" dir="rtl">
+                              {settings.branchUr}
+                            </p>
+                          )}
+                          {settings.addressUr && (
+                            <p className="font-bold text-slate-800 font-musaffah-title" dir="rtl">
+                              {settings.addressUr}
+                            </p>
+                          )}
+                          <p>
+                            Helpline: {settings.phoneEn}
+                            {settings.phoneUr && settings.phoneUr !== settings.phoneEn ? ` | ${settings.phoneUr}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-center pt-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold font-musaffah-title text-slate-950">
+                          انفرادی پیسہ جمع و واپسی کھاتہ اسٹیٹمنٹ
+                        </h1>
+                        <p className="text-xs text-slate-600 font-brand-en" dir="ltr">
+                          {(settings.businessNameEn || 'EAGLE STAR BRAND').toUpperCase()} — INDIVIDUAL CASH JAMA CUSTOMER STATEMENT
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Customer Account Details Card */}
+                    <div className="border-2 border-slate-900 rounded-xl p-3.5 bg-slate-50 text-xs">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ دار کا نام:</span>
+                          <span className="font-black text-slate-950 text-sm font-urdu-heading">{amanatAccount.ownerName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ نمبر (Account No):</span>
+                          <span className="font-mono font-black text-slate-950 text-sm">{amanatAccount.accountNo}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">رابطہ / فون نمبر:</span>
+                          <span className="font-mono font-bold text-slate-950 text-xs" dir="ltr">{amanatAccount.ownerPhone || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">شہر / پتہ:</span>
+                          <span className="font-bold text-slate-950 text-xs">{amanatAccount.city || amanatAccount.ownerAddress || 'Dubai'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ آغاز تاریخ:</span>
+                          <span className="font-mono font-semibold text-slate-900">{amanatAccount.openedDate || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">اسٹیٹمنٹ دورانیہ:</span>
+                          <span className="font-bold text-slate-900 font-mono">{reportDateRange || 'مکمل ہسٹری'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ کرنسی:</span>
+                          <span className="font-mono font-black text-emerald-800">{acctCurrency}</span>
+                        </div>
+                        <div className="bg-emerald-100 border border-emerald-300 rounded-lg p-1.5 text-center">
+                          <span className="text-emerald-950 block text-[10px] font-bold">موجودہ صافی بیلنس:</span>
+                          <span className="font-mono font-black text-emerald-950 text-sm">
+                            {currentBal.toLocaleString()} {acctCurrency}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ledger Entries Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-slate-900 text-xs">
+                        <thead>
+                          <tr className="bg-slate-900 text-white font-bold text-center">
+                            <th className="border border-slate-700 py-2 px-2 w-10">نمبر شمار</th>
+                            <th className="border border-slate-700 py-2 px-2 w-24">تاریخ</th>
+                            <th className="border border-slate-700 py-2 px-2 w-24">رسید نمبر</th>
+                            <th className="border border-slate-700 py-2 px-2">قسم اندراج</th>
+                            <th className="border border-slate-700 py-2 px-2">تفصیل / وصول کنندہ و آرڈر</th>
+                            <th className="border border-slate-700 py-2 px-2">طریقہ / بینک</th>
+                            <th className="border border-slate-700 py-2 px-2 text-right bg-emerald-950">جمع (+)</th>
+                            <th className="border border-slate-700 py-2 px-2 text-right bg-rose-950">کٹوتی / واپسی (-)</th>
+                            <th className="border border-slate-700 py-2 px-2 text-right bg-slate-800">بقایا بیلنس</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entriesToRender.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="text-center py-6 text-slate-500 font-bold">
+                                اس دورانیہ میں کوئی اندراج دستیاب نہیں ہے
+                              </td>
+                            </tr>
+                          ) : (
+                            entriesToRender.map((entry, idx) => {
+                              const isDep = entry.type === 'initial_deposit' || entry.type === 'additional_deposit';
+                              return (
+                                <tr key={entry.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                  <td className="border border-slate-300 py-2 px-2 text-center font-mono font-bold text-slate-700">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 font-mono text-center text-slate-800">
+                                    {entry.date}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-blue-900 text-center">
+                                    {entry.receiptNo || '—'}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 text-center">
+                                    <span
+                                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-urdu-heading ${
+                                        isDep
+                                          ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
+                                          : 'bg-rose-100 text-rose-950 border border-rose-300'
+                                      }`}
+                                    >
+                                      {entry.type === 'initial_deposit'
+                                        ? 'ابتدائی جمع'
+                                        : entry.type === 'additional_deposit'
+                                        ? 'مزید جمع'
+                                        : entry.type === 'third_party_payment'
+                                        ? 'منی ٹرانسفر کٹوتی'
+                                        : entry.type === 'returned_to_owner'
+                                        ? 'رقم واپسی'
+                                        : entry.type === 'partial_withdrawal'
+                                        ? 'جزوی واپسی'
+                                        : 'مکمل واپسی'}
+                                    </span>
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 font-medium font-urdu-body text-slate-900">
+                                    <div>{entry.description}</div>
+                                    {entry.relatedPerson && (
+                                      <div className="text-[11px] text-slate-600 font-bold mt-0.5">
+                                        وصول کنندہ: {entry.relatedPerson}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 text-center text-[11px] font-bold text-slate-700">
+                                    {entry.paymentMethod === 'Cash' || !entry.paymentMethod
+                                      ? 'نقد (کیش)'
+                                      : entry.bankName || entry.paymentMethod}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-emerald-800">
+                                    {isDep ? `+${entry.amount.toLocaleString()}` : '—'}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-rose-700">
+                                    {!isDep ? `-${entry.amount.toLocaleString()}` : '—'}
+                                  </td>
+                                  <td className="border border-slate-300 py-2 px-2 font-mono font-black text-right text-slate-950 bg-slate-50">
+                                    {entry.newBalance.toLocaleString()} {acctCurrency}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-200 font-extrabold text-slate-900 border-t-2 border-slate-900">
+                            <td colSpan={6} className="border border-slate-400 py-2.5 px-3 text-right">
+                              میزان کل (Grand Totals):
+                            </td>
+                            <td className="border border-slate-400 py-2.5 px-2 font-mono font-extrabold text-right text-emerald-900">
+                              +{totalDeposited.toLocaleString()} {acctCurrency}
+                            </td>
+                            <td className="border border-slate-400 py-2.5 px-2 font-mono font-extrabold text-right text-rose-900">
+                              -{totalWithdrawn.toLocaleString()} {acctCurrency}
+                            </td>
+                            <td className="border border-slate-400 py-2.5 px-2 font-mono font-black text-right text-slate-950 text-sm bg-slate-300">
+                              {currentBal.toLocaleString()} {acctCurrency}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    {/* Footer Terms & Signatures */}
+                    <div className="pt-3 border-t-2 border-slate-900 space-y-4">
+                      <div className="bg-emerald-50 border border-emerald-600 rounded-lg py-2 px-4 text-center">
+                        <p className="font-musaffah-title text-sm font-bold text-emerald-950" dir="rtl">
+                          {resolveBrandText(
+                            settings.receiptFooterCashJamahUr,
+                            'ایگل اسٹار برانڈ — انفرادی پیسہ جمع و تحویل میں رکھی گئی رقم بوقت ضرورت فوری قابل واپسی ہے۔'
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-end pt-2 text-xs">
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>تیار کنندہ (Prepared By)</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>دستخط کھاتہ دار</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل اسٹار برانڈ'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : activeFormat === 'J' && (receiptModal.customer || customer) ? (
+              /* FORMAT J: COMPREHENSIVE 360° CUSTOMER STATEMENT & COMPLETE LEDGER (CASH JAMA + MONEY TRANSFERS + UDHAR KHATA) */
+              (() => {
+                const effCust = receiptModal.customer || customer!;
+                const effTransfers = customerTransfers;
+                const effLoans = customerLoans;
+                const effAmanat = customerAmanat;
+                const effAmanatEntries = effAmanat?.entries || [];
+
+                // Totals
+                const totalTransfersAED = effTransfers.reduce(
+                  (sum, tr) => sum + (tr.totalCollectedAED || tr.amountAED || 0),
+                  0
+                );
+                const totalTransfersPKR = effTransfers.reduce(
+                  (sum, tr) => sum + (tr.netPayablePKR || tr.amountPKR || 0),
+                  0
+                );
+
+                const amanatBalance = effAmanat?.currentBalance || 0;
+                const amanatCurrency = effAmanat?.currency || 'PKR';
+                const amanatDeposited = effAmanatEntries
+                  .filter(e => e.type === 'initial_deposit' || e.type === 'additional_deposit')
+                  .reduce((sum, e) => sum + e.amount, 0);
+                const amanatDeducted = effAmanatEntries
+                  .filter(e => e.type !== 'initial_deposit' && e.type !== 'additional_deposit')
+                  .reduce((sum, e) => sum + e.amount, 0);
+
+                const totalLoansTaken = effLoans.reduce((sum, l) => sum + l.originalAmount, 0);
+                const totalLoansRepaid = effLoans.reduce((sum, l) => sum + l.totalRepaid, 0);
+                const totalLoansRemaining = effLoans.reduce((sum, l) => sum + l.remainingBalance, 0);
+                const loanCurrency = effLoans[0]?.currency || 'PKR';
+
+                return (
+                  <div className="space-y-6 text-slate-900" dir="rtl">
+                    {/* Header with Eagle Star Branding */}
+                    <div className="border-b-2 border-slate-900 pb-3">
+                      <div className="flex flex-col sm:flex-row items-center justify-between pb-2 mb-2 border-b border-slate-200 gap-2">
+                        <EagleStarLogo
+                          variant="print"
+                          size="sm"
+                          showSubtitle={true}
+                          customNameEn={settings.businessNameEn}
+                          customNameUr={settings.businessNameUr}
+                          customSubtitle={settings.branchEn}
+                          customLogoUrl={settings.customLogoUrl}
+                        />
+                        <div
+                          className="text-right sm:text-left text-[11px] text-slate-700 font-mono space-y-0.5"
+                          dir="ltr"
+                        >
+                          <p className="font-bold text-slate-900">{settings.branchEn || branchName}</p>
+                          {settings.branchUr && (
+                            <p className="font-bold text-slate-900 font-musaffah-title" dir="rtl">
+                              {settings.branchUr}
+                            </p>
+                          )}
+                          {settings.addressUr && (
+                            <p className="font-bold text-slate-800 font-musaffah-title" dir="rtl">
+                              {settings.addressUr}
+                            </p>
+                          )}
+                          <p>
+                            Helpline: {settings.phoneEn}
+                            {settings.phoneUr && settings.phoneUr !== settings.phoneEn
+                              ? ` | ${settings.phoneUr}`
+                              : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-center pt-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold font-musaffah-title text-slate-950">
+                          گاہک جامع کھاتہ و لین دین اسٹیٹمنٹ (360° ہسٹری)
+                        </h1>
+                        <p className="text-xs text-slate-600 font-brand-en" dir="ltr">
+                          {(settings.businessNameEn || 'EAGLE STAR BRAND').toUpperCase()} — COMPREHENSIVE CUSTOMER 360° STATEMENT & LEDGER
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Customer Profile Box */}
+                    <div className="border-2 border-slate-900 rounded-xl p-3.5 bg-slate-50 text-xs">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            گاہک کا نام:
+                          </span>
+                          <span className="font-black text-slate-950 text-sm font-urdu-heading">
+                            {effCust.name} {effCust.nameUr ? `(${effCust.nameUr})` : ''}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            کسٹمر کوڈ (Customer Code):
+                          </span>
+                          <span className="font-mono font-black text-slate-950 text-sm">
+                            {effCust.customerCode}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            رابطہ فون نمبر:
+                          </span>
+                          <span className="font-mono font-bold text-slate-950 text-xs" dir="ltr">
+                            {effCust.phone || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            شہر / پتہ:
+                          </span>
+                          <span className="font-bold text-slate-950 text-xs">
+                            {effCust.city || 'Dubai'}, {effCust.address || effCust.country || ''}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            رجسٹریشن تاریخ:
+                          </span>
+                          <span className="font-mono font-semibold text-slate-900">
+                            {effCust.dateAdded || '—'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            اسٹیٹمنٹ دورانیہ:
+                          </span>
+                          <span className="font-bold text-slate-900 font-mono">
+                            {reportDateRange || 'مکمل ریکارڈ / All Records'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">
+                            پرنٹ تاریخ و وقت:
+                          </span>
+                          <span className="font-mono font-semibold text-slate-800" dir="ltr">
+                            {new Date().toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="bg-slate-200 border border-slate-400 rounded-lg p-1.5 text-center">
+                          <span className="text-slate-800 block text-[10px] font-bold">
+                            کل آرڈرز و ریکارڈ:
+                          </span>
+                          <span className="font-mono font-black text-slate-950 text-sm">
+                            {effTransfers.length} ٹرانسفرز | {effLoans.length} ادھار
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Financial KPI Summary Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Cash Jama Card */}
+                      <div className="border-2 border-emerald-600 bg-emerald-50/70 p-3 rounded-xl space-y-1">
+                        <span className="text-[11px] font-extrabold text-emerald-950 block">
+                          💰 پیسہ جمع کھاتہ بقایا (Cash Jama Balance)
+                        </span>
+                        <div className="text-xl font-black font-mono text-emerald-950">
+                          {amanatBalance.toLocaleString()} {amanatCurrency}
+                        </div>
+                        <div className="text-[11px] text-emerald-900 font-mono flex justify-between pt-1 border-t border-emerald-300">
+                          <span>کل جمع: +{amanatDeposited.toLocaleString()}</span>
+                          <span>کل کٹوتی/واپسی: -{amanatDeducted.toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      {/* Transfers Card */}
+                      <div className="border-2 border-blue-600 bg-blue-50/70 p-3 rounded-xl space-y-1">
+                        <span className="text-[11px] font-extrabold text-blue-950 block">
+                          💸 کل منی ٹرانسفرز (Total Transfers Volume)
+                        </span>
+                        <div className="text-xl font-black font-mono text-blue-950">
+                          {totalTransfersAED.toLocaleString()} AED
+                        </div>
+                        <div className="text-[11px] text-blue-900 font-mono flex justify-between pt-1 border-t border-blue-300">
+                          <span>کل آرڈرز: {effTransfers.length}</span>
+                          <span>مساوی: {totalTransfersPKR.toLocaleString()} PKR</span>
+                        </div>
+                      </div>
+
+                      {/* Udhar / Loan Card */}
+                      <div className="border-2 border-rose-600 bg-rose-50/70 p-3 rounded-xl space-y-1">
+                        <span className="text-[11px] font-extrabold text-rose-950 block">
+                          📋 واجب الادا ادھار / قرضہ (Pending Loan)
+                        </span>
+                        <div className="text-xl font-black font-mono text-rose-950">
+                          {totalLoansRemaining.toLocaleString()} {loanCurrency}
+                        </div>
+                        <div className="text-[11px] text-rose-900 font-mono flex justify-between pt-1 border-t border-rose-300">
+                          <span>کل ادھار لیا: {totalLoansTaken.toLocaleString()}</span>
+                          <span>واپسی ادا کی: {totalLoansRepaid.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 1: CASH JAMA (AMANAT) KHATA LEDGER */}
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between border-b-2 border-emerald-700 pb-1">
+                        <h2 className="text-sm font-black text-emerald-950 font-urdu-heading flex items-center gap-1.5">
+                          <span>1. پیسہ جمع کھاتہ تفصیلی اندراجات (Cash Jama Khata Ledger)</span>
+                        </h2>
+                        {effAmanat && (
+                          <span className="text-xs font-mono font-bold text-emerald-900">
+                            کھاتہ نمبر: {effAmanat.accountNo} | موجودہ بقایا: {amanatBalance.toLocaleString()} {amanatCurrency}
+                          </span>
+                        )}
+                      </div>
+
+                      {effAmanatEntries.length === 0 ? (
+                        <div className="text-center py-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 font-bold">
+                          اس گاہک کا پیسہ جمع کھاتہ میں فی الحال کوئی اندراج نہیں ہے۔
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-slate-800 text-[11px]">
+                            <thead>
+                              <tr className="bg-slate-900 text-white font-bold text-center">
+                                <th className="border border-slate-700 py-1.5 px-2 w-8">#</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-20">تاریخ</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-20">رسید نمبر</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-28">قسم اندراج</th>
+                                <th className="border border-slate-700 py-1.5 px-2">تفصیل / متعلقہ فرد و آرڈر</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-24">طریقہ</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-right bg-emerald-950 w-24">جمع (+)</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-right bg-rose-950 w-24">کٹوتی / واپسی (-)</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-right bg-slate-800 w-28">بقایا بیلنس</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {effAmanatEntries.map((entry, idx) => {
+                                const isDep = entry.type === 'initial_deposit' || entry.type === 'additional_deposit';
+                                return (
+                                  <tr key={entry.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                    <td className="border border-slate-300 py-1 px-1 text-center font-mono font-bold text-slate-700">
+                                      {idx + 1}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 font-mono text-center text-slate-800">
+                                      {entry.date}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 font-mono font-bold text-blue-900 text-center">
+                                      {entry.receiptNo || '—'}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 text-center font-urdu-heading font-bold">
+                                      {entry.type === 'initial_deposit'
+                                        ? 'ابتدائی جمع'
+                                        : entry.type === 'additional_deposit'
+                                        ? 'مزید جمع'
+                                        : entry.type === 'third_party_payment'
+                                        ? 'منی ٹرانسفر کٹوتی'
+                                        : 'رقم واپسی'}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-2 font-medium font-urdu-body text-slate-900">
+                                      {entry.description}
+                                      {entry.relatedPerson && (
+                                        <span className="block text-[10px] text-slate-600 font-bold">
+                                          متعلقہ شخص: {entry.relatedPerson}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 text-center font-bold text-slate-700">
+                                      {entry.paymentMethod === 'Cash' || !entry.paymentMethod
+                                        ? 'نقد کیش'
+                                        : entry.bankName || entry.paymentMethod}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 font-mono font-bold text-right text-emerald-800">
+                                      {isDep ? `+${entry.amount.toLocaleString()}` : '—'}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 font-mono font-bold text-right text-rose-700">
+                                      {!isDep ? `-${entry.amount.toLocaleString()}` : '—'}
+                                    </td>
+                                    <td className="border border-slate-300 py-1 px-1 font-mono font-black text-right text-slate-950 bg-slate-100">
+                                      {entry.newBalance.toLocaleString()} {amanatCurrency}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-200 font-extrabold text-slate-900 border-t-2 border-slate-900">
+                                <td colSpan={6} className="border border-slate-400 py-1 px-2 text-right font-urdu-heading">
+                                  پیسہ جمع میزان:
+                                </td>
+                                <td className="border border-slate-400 py-1 px-1 font-mono font-black text-right text-emerald-900">
+                                  +{amanatDeposited.toLocaleString()}
+                                </td>
+                                <td className="border border-slate-400 py-1 px-1 font-mono font-black text-right text-rose-900">
+                                  -{amanatDeducted.toLocaleString()}
+                                </td>
+                                <td className="border border-slate-400 py-1 px-1 font-mono font-black text-right text-slate-950 bg-slate-300">
+                                  {amanatBalance.toLocaleString()} {amanatCurrency}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SECTION 2: SENT MONEY TRANSFERS */}
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between border-b-2 border-blue-700 pb-1">
+                        <h2 className="text-sm font-black text-blue-950 font-urdu-heading">
+                          2. ارسال کردہ منی ٹرانسفرز ریکارڈ (Sent Money Transfers)
+                        </h2>
+                        <span className="text-xs font-mono font-bold text-blue-900">
+                          کل بھیجے گئے آرڈرز: {effTransfers.length} | کل حجم: {totalTransfersAED.toLocaleString()} AED
+                        </span>
+                      </div>
+
+                      {effTransfers.length === 0 ? (
+                        <div className="text-center py-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 font-bold">
+                          اس گاہک کی جانب سے کوئی منی ٹرانسفر ریکارڈ موجود نہیں ہے۔
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse border border-slate-800 text-[11px]">
+                            <thead>
+                              <tr className="bg-slate-900 text-white font-bold text-center">
+                                <th className="border border-slate-700 py-1.5 px-2 w-8">#</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-20">تاریخ</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-24">آرڈر نمبر</th>
+                                <th className="border border-slate-700 py-1.5 px-2">وصول کنندہ (پاکستان)</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-24">اسٹیشن</th>
+                                <th className="border border-slate-700 py-1.5 px-2 w-24">چینل</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-right bg-blue-950 w-24">رقم درہم (AED)</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-center w-16">شرح ریٹ</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-right bg-emerald-950 w-28">رقم روپیہ (PKR)</th>
+                                <th className="border border-slate-700 py-1.5 px-2 text-center w-16">اسٹیٹس</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {effTransfers.map((tr, idx) => (
+                                <tr key={tr.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                  <td className="border border-slate-300 py-1 px-1 text-center font-mono font-bold text-slate-700">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 font-mono text-center text-slate-800">
+                                    {tr.date}
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 font-mono font-bold text-blue-900 text-center">
+                                    {tr.orderNumber}
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-2 font-medium text-slate-900">
+                                    <div className="font-bold">{tr.receiverName}</div>
+                                    <div className="text-[10px] text-slate-600 font-mono" dir="ltr">{tr.receiverPhone}</div>
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 text-center font-urdu-heading font-bold text-emerald-950">
+                                    {tr.station}
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 text-center font-bold text-slate-700">
+                                    {tr.payoutMethod || 'Cash'}
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 font-mono font-bold text-right text-blue-900">
+                                    {(tr.totalCollectedAED || tr.amountAED).toLocaleString()} AED
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 font-mono text-center text-slate-700">
+                                    {tr.exchangeRate}
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 font-mono font-black text-right text-emerald-900 bg-slate-50">
+                                    {(tr.netPayablePKR || tr.amountPKR).toLocaleString()} PKR
+                                  </td>
+                                  <td className="border border-slate-300 py-1 px-1 text-center font-bold text-emerald-700">
+                                    {tr.status}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-200 font-extrabold text-slate-900 border-t-2 border-slate-900">
+                                <td colSpan={6} className="border border-slate-400 py-1 px-2 text-right font-urdu-heading">
+                                  ٹرانسفرز کل میزان:
+                                </td>
+                                <td className="border border-slate-400 py-1 px-1 font-mono font-black text-right text-blue-950">
+                                  {totalTransfersAED.toLocaleString()} AED
+                                </td>
+                                <td className="border border-slate-400 py-1 px-1"></td>
+                                <td className="border border-slate-400 py-1 px-1 font-mono font-black text-right text-emerald-950 bg-slate-300">
+                                  {totalTransfersPKR.toLocaleString()} PKR
+                                </td>
+                                <td className="border border-slate-400 py-1 px-1"></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SECTION 3: UDHAR / LOANS KHATA */}
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between border-b-2 border-rose-700 pb-1">
+                        <h2 className="text-sm font-black text-rose-950 font-urdu-heading">
+                          3. ادھار / لون کھاتہ تفصیلات (Udhar / Loans Ledger)
+                        </h2>
+                        <span className="text-xs font-mono font-bold text-rose-900">
+                          کل ادھار کھاتے: {effLoans.length} | واجب الادا بقایا: {totalLoansRemaining.toLocaleString()} {loanCurrency}
+                        </span>
+                      </div>
+
+                      {effLoans.length === 0 ? (
+                        <div className="text-center py-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 font-bold">
+                          اس گاہک کے ذمے کوئی ادھار یا قرضہ ریکارڈ نہیں ہے۔
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {effLoans.map((loanItem, lIdx) => (
+                            <div key={loanItem.id || lIdx} className="border border-slate-300 rounded-lg overflow-hidden">
+                              <div className="bg-slate-100 p-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold border-b border-slate-300">
+                                <div>
+                                  <span className="text-blue-900 font-mono">{loanItem.loanNo}</span>
+                                  <span className="mx-2">·</span>
+                                  <span>تاریخ اجرا: {loanItem.loanDate}</span>
+                                  {loanItem.dueDate && (
+                                    <>
+                                      <span className="mx-2">·</span>
+                                      <span className="text-rose-700 font-bold">واپسی تاریخ: {loanItem.dueDate}</span>
+                                    </>
+                                  )}
+                                </div>
+                                <div className="font-mono">
+                                  <span>کل قرض: {loanItem.originalAmount.toLocaleString()} {loanItem.currency}</span>
+                                  <span className="mx-2">|</span>
+                                  <span className="text-emerald-800">واپسی شدہ: {loanItem.totalRepaid.toLocaleString()}</span>
+                                  <span className="mx-2">|</span>
+                                  <span className="text-rose-700 font-black">واجب الادا: {loanItem.remainingBalance.toLocaleString()} {loanItem.currency}</span>
+                                </div>
+                              </div>
+
+                              {loanItem.repayments && loanItem.repayments.length > 0 && (
+                                <table className="w-full border-collapse text-[10px]">
+                                  <thead>
+                                    <tr className="bg-slate-50 text-slate-700 border-b border-slate-200">
+                                      <th className="py-1 px-2 text-center w-8">قسط</th>
+                                      <th className="py-1 px-2 text-center w-20">تاریخ واپسی</th>
+                                      <th className="py-1 px-2 text-center w-20">رسید نمبر</th>
+                                      <th className="py-1 px-2 text-right">ادا شدہ رقم</th>
+                                      <th className="py-1 px-2 text-center">طریقہ</th>
+                                      <th className="py-1 px-2">وصول کنندہ</th>
+                                      <th className="py-1 px-2 text-right">بقایا بعد از ادائیگی</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {loanItem.repayments.map((rp, rIdx) => (
+                                      <tr key={rp.id || rIdx}>
+                                        <td className="py-1 px-2 text-center font-mono">{rIdx + 1}</td>
+                                        <td className="py-1 px-2 text-center font-mono">{rp.date}</td>
+                                        <td className="py-1 px-2 text-center font-mono font-bold text-blue-900">{rp.receiptNo}</td>
+                                        <td className="py-1 px-2 text-right font-mono font-bold text-emerald-800">{rp.amount.toLocaleString()}</td>
+                                        <td className="py-1 px-2 text-center">{rp.paymentMethod || 'Cash'}</td>
+                                        <td className="py-1 px-2">{rp.receivedBy || 'آفس'}</td>
+                                        <td className="py-1 px-2 text-right font-mono font-bold">{rp.newBalance?.toLocaleString() || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer Terms & Signatures */}
+                    <div className="pt-3 border-t-2 border-slate-900 space-y-4">
+                      <div className="bg-slate-100 border border-slate-400 rounded-lg py-2 px-4 text-center">
+                        <p className="font-musaffah-title text-sm font-bold text-slate-900" dir="rtl">
+                          {resolveBrandText(
+                            settings.receiptFooterCashJamahUr,
+                            'ایگل اسٹار برانڈ — یہ گاہک کی تمام ٹرانزیکشنز، پیسہ جمع، منی ٹرانسفرز اور ادھار کھاتے کی مصدقہ سرکاری اسٹیٹمنٹ ہے۔'
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-end pt-2 text-xs">
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>تیار کنندہ (Prepared By)</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>دستخط گاہک (Customer Signature)</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل اسٹار برانڈ'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
             ) : (
               /* UNIVERSAL OFFICIAL REFERENCE RECEIPT SLIP (FOR ALL MONEY TRANSFERS, CASH JAMA, DEPOSITS & LOANS) */
               /* FORMAT A: OFFICIAL MONEY TRANSFER SLIP (MATCHING USER REFERENCE RECEIPT & DYNAMIC SETTINGS) */
@@ -2152,15 +3038,37 @@ export const ReceiptViewerModal: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Section 1: Sender & Details (Clear Urdu text strictly inside borders with generous bottom clearance) */}
+                  {/* Section 1: Sender / Individual Khata Holder & Details */}
                   <div
                     className="border-b-2 border-black p-4 sm:p-5 space-y-2.5 text-right font-musaffah-title"
                     style={{ borderBottomColor: '#000000', padding: '16px 22px 22px 22px', lineHeight: 1.7 }}
                   >
                     <div className="text-lg sm:text-xl font-black flex items-baseline justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
-                      <span className="font-black text-slate-950 shrink-0" style={{ color: '#000000' }}>ارسال کنندہ :</span>
+                      <span className="font-black text-slate-950 shrink-0" style={{ color: '#000000' }}>
+                        {(amanatAccount || amanatEntry) && !transfer
+                          ? 'کھاتہ دار کا نام :'
+                          : loan && !transfer
+                          ? 'قرض دار / کھاتہ دار :'
+                          : 'ارسال کنندہ :'}
+                      </span>
                       <span className="font-bold text-slate-950" dir="auto" style={{ color: '#000000', unicodeBidi: 'isolate' }}>{senderNameDisplay}</span>
                     </div>
+                    {((amanatEntry?.relatedPerson || repayment?.receivedBy) && !transfer) && (
+                      <div className="text-lg sm:text-xl font-black flex items-baseline justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                        <span className="font-black text-slate-950 shrink-0" style={{ color: '#000000' }}>
+                          {amanatEntry
+                            ? amanatEntry.type === 'initial_deposit' || amanatEntry.type === 'additional_deposit'
+                              ? 'جمع کرانے والا :'
+                              : 'وصول کنندہ :'
+                            : repayment?.entryType === 'additional_loan'
+                            ? 'وصول کنندہ :'
+                            : 'جمع کرانے والا :'}
+                        </span>
+                        <span className="font-bold text-slate-950" dir="auto" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                          {amanatEntry?.relatedPerson || repayment?.receivedBy}
+                        </span>
+                      </div>
+                    )}
                     <div className="text-lg sm:text-xl font-black flex items-baseline justify-start gap-3 flex-wrap pt-1" style={{ lineHeight: 1.75, paddingBottom: '4px' }}>
                       <span className="font-black text-slate-950 shrink-0" style={{ color: '#000000' }}>تفصیل :</span>
                       <span className="font-bold text-slate-950" style={{ color: '#000000', lineHeight: 1.75 }}>
@@ -2207,7 +3115,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Section 3: Customer Account & Khata Balances (Matching reference image) */}
+                  {/* Section 3: Customer Account & Khata Balances */}
                   <div
                     className="border-b-2 border-black p-4 sm:p-5 space-y-3 text-right font-musaffah-title"
                     style={{ borderBottomColor: '#000000', padding: '16px 22px 22px 22px', lineHeight: 1.7 }}
@@ -2215,7 +3123,28 @@ export const ReceiptViewerModal: React.FC = () => {
                     <div className="text-lg sm:text-xl font-black flex items-baseline justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
                       <span className="font-black text-slate-950 shrink-0" style={{ color: '#000000' }}>اکاؤنٹ :</span>
                       <span className="font-bold text-slate-950" style={{ color: '#000000' }}>
-                        {customerLabelUr} <span className="font-mono font-black text-slate-950" dir="ltr" style={{ unicodeBidi: 'isolate' }}>{customerCodeNumber}</span>
+                        {(amanatAccount || amanatEntry) && !transfer ? (
+                          <>
+                            انفرادی پیسہ جمع کھاتہ نمبر{' '}
+                            <span className="font-mono font-black text-slate-950" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                              {amanatAccount?.accountNo || customerCodeNumber}
+                            </span>
+                          </>
+                        ) : loan && !transfer ? (
+                          <>
+                            انفرادی قرضہ کھاتہ نمبر{' '}
+                            <span className="font-mono font-black text-slate-950" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                              {loan.loanNo || customerCodeNumber}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {customerLabelUr}{' '}
+                            <span className="font-mono font-black text-slate-950" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                              {customerCodeNumber}
+                            </span>
+                          </>
+                        )}
                       </span>
                     </div>
                     <div
@@ -2226,54 +3155,161 @@ export const ReceiptViewerModal: React.FC = () => {
                       <span className="font-bold text-slate-950" dir="auto" style={{ color: '#000000', unicodeBidi: 'isolate' }}>{senderFullName}</span>
                     </div>
 
-                    {/* Previous and Current Balances (Supporting positive جمع and negative منفی / واجب الادا) */}
+                    {/* Previous and Current Balances (Individual Khata vs Station Transfer/Deposit) */}
                     <div
                       className="pt-3 space-y-2.5 border-t border-black/30"
                       style={{ paddingTop: '14px', paddingBottom: '4px', borderTop: '1.5px solid #0f172a' }}
                     >
-                      <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
-                        <span className="font-black text-slate-950 min-w-[130px]" style={{ color: '#000000' }}>سابقہ بقایا :</span>
-                        <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
-                          {prevBal.toLocaleString()}
-                        </span>
-                        <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                          {prevBal < 0 ? 'منفی (واجب الادا)' : 'جمع'}
-                        </span>
-                      </div>
+                      {(amanatAccount || amanatEntry) && !transfer ? (
+                        <>
+                          <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                            <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>سابقہ کھاتہ بقایا :</span>
+                            <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                              {prevBal.toLocaleString()} {amanatEntry?.currency || amanatAccount?.currency || 'PKR'}
+                            </span>
+                            <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                              جمع (انفرادی کھاتہ)
+                            </span>
+                          </div>
 
-                      {depositEntry && depositMinusDeducted > 0 && (
-                        <div className="text-base sm:text-lg font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
-                          <span className="font-black text-slate-950 min-w-[130px]" style={{ color: '#000000' }}>منفی بقایا کٹوتی :</span>
-                          <span className="font-mono font-black text-base sm:text-lg text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
-                            -{depositMinusDeducted.toLocaleString()}
-                          </span>
-                          <span className="text-slate-950 font-bold text-sm sm:text-base" style={{ color: '#000000' }}>
-                            منہا (جمع رقم {depositEntry.amountPKR.toLocaleString()} سے کٹوتی)
-                          </span>
-                        </div>
+                          {amanatEntry && (
+                            <div className="text-base sm:text-lg font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>
+                                {amanatEntry.type === 'additional_deposit' || amanatEntry.type === 'initial_deposit'
+                                  ? 'موجودہ جمع رقم (+) :'
+                                  : 'واپسی / نکالی گئی رقم (-) :'}
+                              </span>
+                              <span className="font-mono font-black text-base sm:text-lg text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                {amanatEntry.type === 'additional_deposit' || amanatEntry.type === 'initial_deposit' ? '+' : '-'}
+                                {amanatEntry.amount.toLocaleString()} {amanatEntry.currency}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
+                            <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>موجودہ صافی بقایا :</span>
+                            <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                              {curBal.toLocaleString()} {amanatEntry?.currency || amanatAccount?.currency || 'PKR'}
+                            </span>
+                            <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                              {curBal > 0 ? 'جمع (قابل واپسی امانت)' : 'بے باق (صفر بیلنس)'}
+                            </span>
+                          </div>
+                        </>
+                      ) : loan && !transfer ? (
+                        repayment ? (
+                          <>
+                            <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>سابقہ قرض بقایا :</span>
+                              <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                {prevBal.toLocaleString()} {loan.currency}
+                              </span>
+                              <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                                واجب الادا (انفرادی کھاتہ)
+                              </span>
+                            </div>
+
+                            <div className="text-base sm:text-lg font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>
+                                {repayment.entryType === 'additional_loan' ? 'مزید دی گئی رقم (+) :' : 'وصول شدہ واپسی رقم (-) :'}
+                              </span>
+                              <span className="font-mono font-black text-base sm:text-lg text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                {repayment.entryType === 'additional_loan' ? '+' : '-'}
+                                {repayment.amount.toLocaleString()} {loan.currency}
+                              </span>
+                            </div>
+
+                            <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>موجودہ بقایا قرض :</span>
+                              <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                {curBal.toLocaleString()} {loan.currency}
+                              </span>
+                              <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                                {curBal > 0 ? 'واجب الادا (بقایا قرض)' : 'بے باق (مکمل ادا شدہ)'}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>کل قرض رقم :</span>
+                              <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                {loan.originalAmount.toLocaleString()} {loan.currency}
+                              </span>
+                              <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                                قرض جاری شدہ (انفرادی کھاتہ)
+                              </span>
+                            </div>
+
+                            {loan.totalRepaid > 0 && (
+                              <div className="text-base sm:text-lg font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                                <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>کل واپسی وصول شدہ :</span>
+                                <span className="font-mono font-black text-base sm:text-lg text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                  -{loan.totalRepaid.toLocaleString()} {loan.currency}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>موجودہ بقایا قرض :</span>
+                              <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                {loan.remainingBalance.toLocaleString()} {loan.currency}
+                              </span>
+                              <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                                {loan.remainingBalance > 0 ? 'واجب الادا (بقایا قرض)' : 'بے باق (مکمل ادا شدہ)'}
+                              </span>
+                            </div>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                            <span className="font-black text-slate-950 min-w-[130px]" style={{ color: '#000000' }}>سابقہ بقایا :</span>
+                            <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                              {prevBal.toLocaleString()}
+                            </span>
+                            <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                              {prevBal < 0 ? 'منفی (واجب الادا)' : 'جمع'}
+                            </span>
+                          </div>
+
+                          {depositEntry && depositMinusDeducted > 0 && (
+                            <div className="text-base sm:text-lg font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
+                              <span className="font-black text-slate-950 min-w-[130px]" style={{ color: '#000000' }}>منفی بقایا کٹوتی :</span>
+                              <span className="font-mono font-black text-base sm:text-lg text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                                -{depositMinusDeducted.toLocaleString()}
+                              </span>
+                              <span className="text-slate-950 font-bold text-sm sm:text-base" style={{ color: '#000000' }}>
+                                منہا (جمع رقم {depositEntry.amountPKR.toLocaleString()} سے کٹوتی)
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
+                            <span className="font-black text-slate-950 min-w-[130px]" style={{ color: '#000000' }}>موجودہ بقایا :</span>
+                            <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
+                              {curBal.toLocaleString()}
+                            </span>
+                            <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
+                              {curBal < 0 ? 'منفی (واجب الادا - اسٹیشن ادائیگی)' : 'جمع'}
+                            </span>
+                          </div>
+                        </>
                       )}
-
-                      <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
-                        <span className="font-black text-slate-950 min-w-[130px]" style={{ color: '#000000' }}>موجودہ بقایا :</span>
-                        <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
-                          {curBal.toLocaleString()}
-                        </span>
-                        <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                          {curBal < 0 ? 'منفی (واجب الادا - اسٹیشن ادائیگی)' : 'جمع'}
-                        </span>
-                      </div>
                     </div>
                   </div>
 
-                  {/* Section 4: Station Footer */}
+                  {/* Section 4: Footer (Station ONLY for Station Transfers/Deposits; Individual Khata NEVER shows Station) */}
                   <div
                     className="p-3.5 sm:p-4 text-right font-musaffah-title font-bold text-sm sm:text-base flex flex-wrap items-center justify-start gap-5 sm:gap-10 text-slate-950"
                     style={{ padding: '14px 22px 18px 22px', gap: '28px', lineHeight: 1.7 }}
                   >
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="font-black text-slate-950" style={{ color: '#000000' }}>سٹیشن: </span>
-                      <span className="font-bold text-slate-950" dir="auto" style={{ color: '#000000', unicodeBidi: 'isolate' }}>{slipStation}</span>
-                    </div>
+                    {isStationReceipt && slipStation && !isIndividualKhataReceipt && (
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-black text-slate-950" style={{ color: '#000000' }}>سٹیشن: </span>
+                        <span className="font-bold text-slate-950" dir="auto" style={{ color: '#000000', unicodeBidi: 'isolate' }}>{slipStation}</span>
+                      </div>
+                    )}
                     <div className="flex items-baseline gap-1.5">
                       <span className="font-black text-slate-950" style={{ color: '#000000' }}>پتہ : </span>
                       <span className="font-bold text-slate-900" dir="auto" style={{ color: '#000000', unicodeBidi: 'isolate' }}>{slipAddress}</span>
@@ -2293,49 +3329,75 @@ export const ReceiptViewerModal: React.FC = () => {
                     className="bg-slate-50 border border-slate-800 rounded-lg py-3 px-4 text-center space-y-1"
                     style={{ padding: '12px 20px 16px 20px', lineHeight: 1.75 }}
                   >
-                    {(amanatAccount || amanatEntry) && settings.receiptFooterCashJamahUr && (
-                      <p className="font-musaffah-title text-sm font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.7 }}>
-                        {resolveBrandText(settings.receiptFooterCashJamahUr)}
-                      </p>
-                    )}
-                    {depositEntry && settings.receiptFooterDepositUr && (
-                      <p className="font-musaffah-title text-sm font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.7 }}>
-                        {resolveBrandText(settings.receiptFooterDepositUr)}
-                      </p>
-                    )}
-                    {loan && settings.receiptFooterLoanUr && (
-                      <p className="font-musaffah-title text-sm font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.7 }}>
-                        {resolveBrandText(settings.receiptFooterLoanUr)}
-                      </p>
-                    )}
-                    <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
-                      {resolveBrandText(
-                        settings.receiptFooterUr,
-                        'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔'
-                      )}
-                    </p>
-                    {settings.receiptFooterEn && settings.receiptFooterEn !== settings.receiptFooterUr && (
-                      <p className="text-[11px] font-semibold text-slate-700" dir="ltr" style={{ color: '#000000', lineHeight: 1.5 }}>
-                        {resolveBrandText(settings.receiptFooterEn)}
-                      </p>
+                    {loan ? (
+                      <>
+                        <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
+                          {resolveBrandText(
+                            settings.receiptFooterLoanUr,
+                            'ایگل اسٹار برانڈ — انفرادی ادھار / قرضہ کھاتہ رسید۔ آپ کے تعاون کا شکریہ!'
+                          )}
+                        </p>
+                        {settings.receiptFooterLoanEn && (
+                          <p className="text-[11px] font-semibold text-slate-700" dir="ltr" style={{ color: '#000000', lineHeight: 1.5 }}>
+                            {resolveBrandText(settings.receiptFooterLoanEn)}
+                          </p>
+                        )}
+                      </>
+                    ) : amanatAccount || amanatEntry ? (
+                      <>
+                        <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
+                          {resolveBrandText(
+                            settings.receiptFooterCashJamahUr,
+                            'ایگل اسٹار برانڈ — انفرادی پیسہ جمع و واپسی کھاتہ رسید۔ آپ کے اعتماد کا شکریہ!'
+                          )}
+                        </p>
+                        {settings.receiptFooterCashJamahEn && (
+                          <p className="text-[11px] font-semibold text-slate-700" dir="ltr" style={{ color: '#000000', lineHeight: 1.5 }}>
+                            {resolveBrandText(settings.receiptFooterCashJamahEn)}
+                          </p>
+                        )}
+                      </>
+                    ) : depositEntry ? (
+                      <>
+                        <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
+                          {resolveBrandText(
+                            settings.receiptFooterDepositUr,
+                            'ایگل اسٹار برانڈ — اسٹیشن کیش جمع و سیٹلمنٹ رسید۔ آپ کے اعتماد کا شکریہ!'
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
+                          {resolveBrandText(
+                            settings.receiptFooterUr,
+                            'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔'
+                          )}
+                        </p>
+                        {settings.receiptFooterEn && settings.receiptFooterEn !== settings.receiptFooterUr && (
+                          <p className="text-[11px] font-semibold text-slate-700" dir="ltr" style={{ color: '#000000', lineHeight: 1.5 }}>
+                            {resolveBrandText(settings.receiptFooterEn)}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                   <div
-                    className="flex justify-between items-end pt-3 pb-3 text-xs"
+                    className="flex justify-between items-end pt-3 pb-3 text-xs font-musaffah-title"
                     style={{ paddingTop: '14px', paddingBottom: '14px', lineHeight: 1.7 }}
                   >
                     <div className="text-center" style={{ paddingBottom: '4px' }}>
                       <div className="border-b border-slate-600 w-36 mb-2" style={{ marginBottom: '8px' }}></div>
-                      <span className="font-bold text-slate-900 inline-block" style={{ lineHeight: 1.7 }}>تیار کنندہ (Prepared By)</span>
+                      <span className="font-bold text-slate-900 inline-block" style={{ lineHeight: 1.7 }}>تیار کنندہ / کیشئر</span>
                     </div>
                     <div className="text-center font-bold text-slate-800" style={{ paddingBottom: '4px' }}>
                       <span className="inline-block font-musaffah-title" style={{ lineHeight: 1.7 }}>
-                        {settings.businessNameUr || 'ایگل اسٹار برانڈ'} ({settings.businessNameEn || 'Eagle Star Brand'})
+                        {settings.businessNameUr || 'ایگل اسٹار برانڈ'} ({settings.branchUr || settings.businessNameEn || 'Eagle Star Brand'})
                       </span>
                     </div>
                     <div className="text-center" style={{ paddingBottom: '4px' }}>
                       <div className="border-b border-slate-600 w-36 mb-2" style={{ marginBottom: '8px' }}></div>
-                      <span className="font-bold text-slate-900 inline-block" style={{ lineHeight: 1.7 }}>دستخط و مہر (Signature & Stamp)</span>
+                      <span className="font-bold text-slate-900 inline-block" style={{ lineHeight: 1.7 }}>دستخط و مہر برانچ منیجر</span>
                     </div>
                   </div>
                 </div>

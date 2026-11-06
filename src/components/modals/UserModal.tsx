@@ -341,7 +341,7 @@ export const UserModal: React.FC<UserModalProps> = ({
               type="text"
               value={fullName}
               onChange={e => setFullName(e.target.value)}
-              placeholder="e.g. Tariq Mehmood"
+              placeholder={language === 'ur' ? 'مکمل نام (Full Name)' : 'Full Name'}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
             />
@@ -355,7 +355,7 @@ export const UserModal: React.FC<UserModalProps> = ({
               type="text"
               value={fullNameUr}
               onChange={e => setFullNameUr(e.target.value)}
-              placeholder="مثلاً طارق محمود"
+              placeholder={language === 'ur' ? 'اردو نام (Full Name Urdu)' : 'Full Name (Urdu)'}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-sm font-urdu-heading focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>

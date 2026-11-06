@@ -1360,16 +1360,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {formatMoney(tr.netPayablePKR, 'PKR')}
                   </td>
                   <td className="py-3 px-4">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-md text-xs font-bold font-urdu-heading ${
-                        tr.status === 'Completed' || tr.status === 'Paid'
-                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                          : tr.status === 'Partially Paid'
-                          ? 'bg-slate-200 text-slate-950 border border-slate-400'
-                          : 'bg-blue-100 text-blue-900 border border-blue-300'
-                      }`}
-                    >
-                      {t(tr.status)}
+                    <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold font-urdu-heading bg-emerald-100 text-emerald-900 border border-emerald-300">
+                      {t('Completed')}
                     </span>
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -1388,15 +1380,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       >
                         <Pencil className="w-4 h-4 text-amber-600" />
                       </button>
-                      {tr.remainingBalancePKR > 0 && (
-                        <button
-                          onClick={() => onRecordPayout(tr)}
-                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
-                          title={t('recordPayout')}
-                        >
-                          {language === 'ur' ? 'ادائیگی' : 'Pay'}
-                        </button>
-                      )}
                       <button
                         onClick={() => {
                           if (

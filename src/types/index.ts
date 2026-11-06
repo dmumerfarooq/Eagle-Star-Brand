@@ -152,6 +152,7 @@ export interface MoneyTransfer {
   accountNumber?: string;
   
   // Financial calculation fields
+  inputCurrency?: string; // e.g. 'AED', 'PKR', 'SAR', 'USD'
   amountAED: number;
   exchangeRate: number; // e.g. 74.07, 75.50
   amountPKR: number; // AED * rate
@@ -179,13 +180,19 @@ export interface MoneyTransfer {
   updatedAt?: string;
 }
 
+export type LoanEntryType = 'repayment' | 'additional_loan';
+
 export interface LoanRepayment {
   id: string;
   loanId: string;
   date: string;
+  entryType?: LoanEntryType; // 'repayment' (return money -) or 'additional_loan' (take more money +)
   amount: number;
   currency: Currency;
+  previousBalance?: number;
+  newBalance?: number;
   paymentMethod: PaymentMethod;
+  receivedBy?: string;
   referenceNo?: string;
   receiptNo: string;
   notes?: string;
@@ -199,7 +206,8 @@ export interface Loan {
   borrowerPhone: string;
   borrowerAddress?: string;
   loanDate: string;
-  originalAmount: number;
+  initialAmount?: number; // First loan amount taken before additional_loan entries
+  originalAmount: number; // Total loan taken (initialAmount + sum of additional_loan entries)
   currency: Currency;
   dueDate: string;
   expectedDuration: '1_month' | '3_months' | '6_months' | 'custom';
@@ -271,6 +279,14 @@ export interface LedgerEntry {
   updatedAt?: string;
 }
 
+export interface CurrencyConfig {
+  code: string; // e.g. 'AED', 'PKR', 'SAR', 'USD', 'GBP', 'OMR'
+  nameEn: string; // e.g. 'UAE Dirham', 'Pakistani Rupees'
+  nameUr: string; // e.g. 'درہم (AED)', 'پاکستانی روپے (PKR)'
+  symbol: string; // e.g. 'AED', 'PKR', 'SAR', '$'
+  rateToPKR: number; // e.g. 77.50 for AED, 1 for PKR
+}
+
 export interface BusinessSettings {
   businessNameEn: string;
   businessNameUr: string;
@@ -283,6 +299,8 @@ export interface BusinessSettings {
   whatsapp: string;
   email: string;
   defaultExchangeRate: number;
+  defaultTransferCurrency?: string;
+  currencies?: CurrencyConfig[];
   manualRateUpdatedAt?: string;
   manualRateUpdatedBy?: string;
   defaultCommissionPct: number;

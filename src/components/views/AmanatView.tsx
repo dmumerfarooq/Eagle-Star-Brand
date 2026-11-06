@@ -18,7 +18,9 @@ import {
   Calendar,
   RotateCcw,
   X,
-  Save
+  Save,
+  ArrowDownLeft,
+  ArrowUpRight
 } from 'lucide-react';
 import { AmanatModalMode } from '../modals/NewAmanatModal';
 
@@ -38,7 +40,8 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
     language,
     formatMoney,
     isSuperAdmin,
-    canManageAmanat
+    canManageAmanat,
+    canDeleteRecords
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,6 +65,7 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
   const [accOwnerName, setAccOwnerName] = useState('');
   const [accOwnerPhone, setAccOwnerPhone] = useState('');
   const [accCity, setAccCity] = useState('');
+  const [accOpenedDate, setAccOpenedDate] = useState('');
   const [accCurrency, setAccCurrency] = useState<Currency>('PKR');
 
   // Edit Single Amanat Entry Modal State
@@ -131,7 +135,27 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
     0
   );
 
-  const handlePrintStatement = () => {
+  const handlePrintIndividualStatement = () => {
+    if (!selectedAccount) return;
+    openReceipt({
+      format: 'I',
+      amanatAccount: selectedAccount,
+      filteredAmanatEntries: filteredEntries,
+      reportTitle: `انفرادی پیسہ جمع کھاتہ اسٹیٹمنٹ: ${selectedAccount.ownerName} (${selectedAccount.accountNo})`,
+      reportDateRange:
+        datePreset === 'all'
+          ? 'مکمل ہسٹری (All History)'
+          : datePreset === 'today'
+          ? `آج کی تاریخ (${todayStr})`
+          : datePreset === 'custom'
+          ? `${dateFrom || 'آغاز'} تا ${dateTo || 'آج'}`
+          : datePreset === '7days'
+          ? 'پچھلے 7 دن (Last 7 Days)'
+          : 'موجودہ ماہ (This Month)'
+    });
+  };
+
+  const handlePrintSlip = () => {
     if (!selectedAccount) return;
     openReceipt({
       format: 'A',
@@ -144,7 +168,8 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
     if (!selectedAccount) return;
     setAccOwnerName(selectedAccount.ownerName);
     setAccOwnerPhone(selectedAccount.ownerPhone);
-    setAccCity(selectedAccount.city || '');
+    setAccCity(selectedAccount.city || selectedAccount.ownerAddress || '');
+    setAccOpenedDate(selectedAccount.openedDate || todayStr);
     setAccCurrency(selectedAccount.currency);
     setIsEditingAccount(true);
   };
@@ -156,6 +181,8 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
       ownerName: accOwnerName.trim() || selectedAccount.ownerName,
       ownerPhone: accOwnerPhone.trim() || selectedAccount.ownerPhone,
       city: accCity.trim() || selectedAccount.city,
+      ownerAddress: accCity.trim() || selectedAccount.ownerAddress,
+      openedDate: accOpenedDate || selectedAccount.openedDate,
       currency: accCurrency,
       entries: selectedAccount.entries.map(e => ({ ...e, currency: accCurrency }))
     };
@@ -174,19 +201,52 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
     setEntryBankName(entry.bankName || '');
   };
 
-  const handleSaveEntryChanges = () => {
+  const handleSaveEntryChanges = (printAfterSave = false) => {
     if (!selectedAccount || !editingEntry) return;
     const amt = Math.max(0, Number(entryAmount) || 0);
-    updateAmanatEntry(selectedAccount.id, editingEntry.id, {
+    if (amt <= 0) return;
+    const updatedPayload: Partial<AmanatEntry> = {
       date: entryDate || editingEntry.date,
       type: entryType,
       amount: amt,
       description: entryDesc.trim() || editingEntry.description,
-      relatedPerson: entryRelatedPerson.trim() || undefined,
+      relatedPerson: entryRelatedPerson.trim(),
       paymentMethod: entryPaymentMethod,
-      bankName: entryBankName.trim() || undefined
-    });
+      bankName: entryPaymentMethod === 'Cash' ? undefined : entryBankName.trim() || undefined
+    };
+    updateAmanatEntry(selectedAccount.id, editingEntry.id, updatedPayload);
+    if (printAfterSave) {
+      const updatedEntryObj: AmanatEntry = {
+        ...editingEntry,
+        ...updatedPayload,
+        amount: amt
+      };
+      openReceipt({
+        format: 'A',
+        amanatAccount: selectedAccount,
+        amanatEntry: updatedEntryObj
+      });
+    }
     setEditingEntry(null);
+  };
+
+  const getEntryTypeUrduLabel = (type: AmanatEntryType) => {
+    switch (type) {
+      case 'initial_deposit':
+        return 'ابتدائی جمع رقم (+)';
+      case 'additional_deposit':
+        return 'مزید جمع رقم (+)';
+      case 'returned_to_owner':
+        return 'مالک کو رقم واپسی (-)';
+      case 'partial_withdrawal':
+        return 'جزوی رقم واپسی (-)';
+      case 'full_withdrawal':
+        return 'مکمل بقایا واپسی (-)';
+      case 'third_party_payment':
+        return 'منی ٹرانسفر کٹوتی (-)';
+      default:
+        return 'کھاتہ ایڈجسٹمنٹ';
+    }
   };
 
   return (
@@ -206,30 +266,41 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
             </div>
             <p className="text-xs text-slate-600 font-medium mt-0.5">
               {language === 'ur'
-                ? 'پیسہ جمع و تحویل میں رکھی گئی رقوم، آدھی یا جزوی رقم ٹرانسفر کٹوتی اور مکمل کھاتہ لیجر'
-                : 'Cash Jamah safekeeping ledger: deposits, half/partial transfer auto-deduction, and full Khata history'}
+                ? 'انفرادی پیسہ جمع کھاتہ: جب کوئی شخص امانت رقم جمع کرائے یا واپس لے (اسٹیشن سے مکمل طور پر الگ ذاتی کھاتہ)'
+                : 'Individual Cash Jama Khata: separate personal ledger when someone deposits or takes/returns money (no station deduction)'}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           {selectedAccount && (
-            <button
-              onClick={() => onOpenNewAmanat(selectedAccount, 'send_transfer')}
-              className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm cursor-pointer"
-            >
-              <ArrowRightLeft className="w-4 h-4 stroke-[2.5]" />
-              <span className="font-urdu-heading">
-                {language === 'ur' ? 'پیسہ جمع سے ٹرانسفر بھیجیں' : 'Send Transfer from Cash Jamah'}
-              </span>
-            </button>
+            <>
+              <button
+                onClick={() => onOpenNewAmanat(selectedAccount, 'add_entry')}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm cursor-pointer"
+              >
+                <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
+                <span className="font-urdu-heading">
+                  {language === 'ur' ? '+ رقم جمع کریں (Deposit)' : '+ Deposit Cash'}
+                </span>
+              </button>
+              <button
+                onClick={() => onOpenNewAmanat(selectedAccount, 'withdraw_entry')}
+                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm cursor-pointer"
+              >
+                <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
+                <span className="font-urdu-heading">
+                  {language === 'ur' ? '- رقم واپسی / نکالیں (Return)' : '- Return / Take Cash'}
+                </span>
+              </button>
+            </>
           )}
           <button
             onClick={() =>
               openReceipt({
                 format: 'G',
                 batchAmanat: filteredAccounts,
-                reportTitle: language === 'ur' ? 'پیسہ جمع و تحویل رجسٹر شیٹ' : 'Cash Jamah Safekeeping Register Sheet'
+                reportTitle: language === 'ur' ? 'انفرادی پیسہ جمع کھاتہ رجسٹر شیٹ' : 'Individual Cash Jama Khata Register Sheet'
               })
             }
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm cursor-pointer"
@@ -240,11 +311,13 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
             </span>
           </button>
           <button
-            onClick={() => onOpenNewAmanat(undefined, 'entry')}
+            onClick={() => onOpenNewAmanat(undefined, 'new_account')}
             className="flex items-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-500 hover:to-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span className="font-urdu-heading">{t('recordAmanat')}</span>
+            <span className="font-urdu-heading">
+              {language === 'ur' ? '+ نیا انفرادی کھاتہ' : '+ New Individual Khata'}
+            </span>
           </button>
         </div>
       </div>
@@ -358,7 +431,7 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
                         <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    {isSuperAdmin && (
+                    {(isSuperAdmin || canDeleteRecords) && (
                       <button
                         onClick={() => {
                           if (confirmDeleteAccountId === selectedAccount.id) {
@@ -389,27 +462,36 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={handlePrintStatement}
-                    className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-900 px-3 py-1.5 rounded-lg border border-slate-300 transition shadow-sm cursor-pointer"
+                    onClick={handlePrintIndividualStatement}
+                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-slate-950 hover:bg-slate-900 px-3.5 py-1.5 rounded-lg border border-slate-900 transition shadow-sm cursor-pointer"
+                    title={language === 'ur' ? 'مکمل کھاتہ یا تاریخ وار اسٹیٹمنٹ پرنٹ کریں' : 'Print Full / Date-wise Khata Statement'}
                   >
-                    <Receipt className="w-4 h-4 text-emerald-700" />
-                    <span>{language === 'ur' ? 'اسٹیٹمنٹ پرنٹ' : 'Print Statement'}</span>
+                    <Printer className="w-4 h-4 text-emerald-400" />
+                    <span>{language === 'ur' ? 'کھاتہ اسٹیٹمنٹ پرنٹ' : 'Print Statement'}</span>
                   </button>
                   <button
-                    onClick={() => onOpenNewAmanat(selectedAccount, 'send_transfer')}
-                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+                    onClick={handlePrintSlip}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-900 px-3 py-1.5 rounded-lg border border-slate-300 transition shadow-sm cursor-pointer"
+                    title={language === 'ur' ? 'آخری واؤچر رسید پرنٹ کریں' : 'Print Slip'}
                   >
-                    <ArrowRightLeft className="w-4 h-4" />
+                    <Receipt className="w-4 h-4 text-emerald-700" />
+                    <span>{language === 'ur' ? 'انفرادی رسید' : 'Print Slip'}</span>
+                  </button>
+                  <button
+                    onClick={() => onOpenNewAmanat(selectedAccount, 'add_entry')}
+                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+                  >
+                    <ArrowDownLeft className="w-4 h-4" />
                     <span>
-                      {language === 'ur' ? 'پیسہ جمع سے ٹرانسفر' : 'Send Transfer'}
+                      {language === 'ur' ? '+ رقم جمع کریں' : '+ Deposit Cash'}
                     </span>
                   </button>
                   <button
-                    onClick={() => onOpenNewAmanat(selectedAccount, 'entry')}
-                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-500 hover:to-emerald-600 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+                    onClick={() => onOpenNewAmanat(selectedAccount, 'withdraw_entry')}
+                    className="flex items-center gap-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>{language === 'ur' ? 'جمع / واپسی درج کریں' : 'Add Entry'}</span>
+                    <ArrowUpRight className="w-4 h-4" />
+                    <span>{language === 'ur' ? '- رقم واپسی / نکالیں' : '- Return Cash'}</span>
                   </button>
                 </div>
               </div>
@@ -518,13 +600,13 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
               <div className="overflow-x-auto flex-1">
                 <table className="w-full text-start text-xs sm:text-sm border-collapse">
                   <thead>
-                    <tr className="bg-slate-100/90 border-b-2 border-slate-300 text-slate-800 font-bold font-urdu-body">
-                      <th className="py-2.5 px-3 text-start">{t('date')}</th>
-                      <th className="py-2.5 px-3 text-start">{t('type')}</th>
-                      <th className="py-2.5 px-3 text-start">{t('notes')}</th>
-                      <th className="py-2.5 px-3 text-start">{t('amount')}</th>
-                      <th className="py-2.5 px-3 text-start">{t('balance')}</th>
-                      <th className="py-2.5 px-3 text-center">{t('actions')}</th>
+                    <tr className="bg-slate-100/90 border-b-2 border-slate-300 text-slate-800 font-bold font-urdu-heading">
+                      <th className="py-2.5 px-3 text-start">تاریخ (Date)</th>
+                      <th className="py-2.5 px-3 text-start">قسم اندراج (Type)</th>
+                      <th className="py-2.5 px-3 text-start">تفصیل / وصول کنندہ</th>
+                      <th className="py-2.5 px-3 text-start">رقم (Amount)</th>
+                      <th className="py-2.5 px-3 text-start">بقایا بیلنس (Balance)</th>
+                      <th className="py-2.5 px-3 text-center">کارروائی (Actions)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -535,94 +617,104 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
                         </td>
                       </tr>
                     ) : (
-                      filteredEntries.map(entry => (
-                        <tr key={entry.id} className="hover:bg-emerald-50/60 transition-colors">
-                          <td className="py-2.5 px-3 font-mono text-slate-700 font-medium">
-                            {entry.date}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-urdu-heading ${
-                                entry.type.toLowerCase().includes('deposit')
-                                  ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
-                                  : 'bg-rose-100 text-rose-950 border border-rose-300'
+                      filteredEntries.map(entry => {
+                        const isDep =
+                          entry.type === 'initial_deposit' || entry.type === 'additional_deposit';
+                        return (
+                          <tr key={entry.id} className="hover:bg-emerald-50/60 transition-colors">
+                            <td className="py-2.5 px-3 font-mono text-slate-700 font-medium">
+                              {entry.date}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-urdu-heading ${
+                                  isDep
+                                    ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
+                                    : 'bg-rose-100 text-rose-950 border border-rose-300'
+                                }`}
+                              >
+                                {getEntryTypeUrduLabel(entry.type)}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-900 font-medium font-urdu-body">
+                              {entry.description}
+                              {(entry.bankName || entry.paymentMethod) && (
+                                <span className="block text-[11px] font-bold text-emerald-950 mt-0.5 font-urdu-heading">
+                                  {entry.paymentMethod === 'Cash'
+                                    ? '💵 نقد کیش (Cash)'
+                                    : `🏦 ${entry.bankName || entry.paymentMethod}`}
+                                </span>
+                              )}
+                              {entry.relatedPerson && (
+                                <span className="block text-[11px] text-slate-700 font-bold font-urdu-heading">
+                                  {isDep ? 'جمع کرانے والا (Deposited By)' : 'وصول کنندہ (Received By)'}:{' '}
+                                  {entry.relatedPerson}
+                                </span>
+                              )}
+                            </td>
+                            <td
+                              className={`py-2.5 px-3 font-mono font-extrabold ${
+                                isDep ? 'text-emerald-800' : 'text-rose-700'
                               }`}
                             >
-                              {t(entry.type)}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-900 font-medium font-urdu-body">
-                            {entry.description}
-                            {(entry.bankName || entry.paymentMethod) && (
-                              <span className="block text-[11px] font-bold text-emerald-950 mt-0.5 font-mono">
-                                {entry.paymentMethod === 'Cash'
-                                  ? '💵 نقد کیش (Cash)'
-                                  : `🏦 ${entry.bankName || entry.paymentMethod}`}
-                              </span>
-                            )}
-                            {entry.relatedPerson && (
-                              <span className="block text-[11px] text-slate-600">
-                                {language === 'ur' ? 'وصول کنندہ فریق' : 'Recipient'}: {entry.relatedPerson}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-extrabold text-slate-950">
-                            {formatMoney(entry.amount, entry.currency)}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-extrabold text-emerald-950">
-                            {formatMoney(entry.newBalance, entry.currency)}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() =>
-                                  openReceipt({
-                                    format: 'A',
-                                    amanatAccount: selectedAccount,
-                                    amanatEntry: entry
-                                  })
-                                }
-                                className="p-1 text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded transition cursor-pointer"
-                                title={t('printReceipt')}
-                              >
-                                <Receipt className="w-4 h-4" />
-                              </button>
-                              {canManageAmanat && (
+                              {isDep ? '+' : '-'}
+                              {formatMoney(entry.amount, entry.currency)}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-extrabold text-slate-950">
+                              {formatMoney(entry.newBalance, entry.currency)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
                                 <button
-                                  onClick={() => openEditEntryModal(entry)}
-                                  className="p-1 text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded transition cursor-pointer"
-                                  title={t('edit')}
+                                  onClick={() =>
+                                    openReceipt({
+                                      format: 'A',
+                                      amanatAccount: selectedAccount,
+                                      amanatEntry: entry
+                                    })
+                                  }
+                                  className="p-1 text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded transition cursor-pointer"
+                                  title="اردو رسید پرنٹ کریں / Print Receipt"
                                 >
-                                  <Edit3 className="w-4 h-4" />
+                                  <Receipt className="w-4 h-4" />
                                 </button>
-                              )}
-                              {isSuperAdmin && (
-                                <button
-                                  onClick={() => {
-                                    if (confirmDeleteEntryId === entry.id) {
-                                      deleteAmanatEntry(selectedAccount.id, entry.id);
-                                      setConfirmDeleteEntryId(null);
-                                    } else {
-                                      setConfirmDeleteEntryId(entry.id);
-                                    }
-                                  }}
-                                  className={`p-1 rounded transition cursor-pointer flex items-center gap-1 ${
-                                    confirmDeleteEntryId === entry.id
-                                      ? 'bg-red-600 text-white px-2 text-[10px] font-bold'
-                                      : 'text-slate-500 hover:text-red-700 hover:bg-red-50'
-                                  }`}
-                                  title={t('delete')}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  {confirmDeleteEntryId === entry.id && (
-                                    <span>{language === 'ur' ? 'حذف؟' : 'Confirm'}</span>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                                {canManageAmanat && (
+                                  <button
+                                    onClick={() => openEditEntryModal(entry)}
+                                    className="p-1 text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded transition cursor-pointer"
+                                    title="ترمیم کریں / Edit Entry"
+                                  >
+                                    <Edit3 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {(isSuperAdmin || canDeleteRecords) && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirmDeleteEntryId === entry.id) {
+                                        deleteAmanatEntry(selectedAccount.id, entry.id);
+                                        setConfirmDeleteEntryId(null);
+                                      } else {
+                                        setConfirmDeleteEntryId(entry.id);
+                                      }
+                                    }}
+                                    className={`p-1 rounded transition cursor-pointer flex items-center gap-1 ${
+                                      confirmDeleteEntryId === entry.id
+                                        ? 'bg-red-600 text-white px-2 text-[10px] font-bold'
+                                        : 'text-slate-500 hover:text-red-700 hover:bg-red-50'
+                                    }`}
+                                    title="حذف کریں / Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    {confirmDeleteEntryId === entry.id && (
+                                      <span>حذف؟</span>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -642,7 +734,7 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200">
             <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
               <h3 className="font-bold text-sm sm:text-base font-urdu-heading">
-                {language === 'ur' ? 'پیسہ جمع کھاتہ دار معلومات میں ترمیم' : 'Edit Cash Jama Account Info'}
+                پیسہ جمع کھاتہ دار معلومات میں ترمیم (Edit Khata Account)
               </h3>
               <button
                 onClick={() => setIsEditingAccount(false)}
@@ -653,65 +745,81 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
             </div>
             <div className="p-5 space-y-3 text-xs sm:text-sm">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {language === 'ur' ? 'کھاتہ دار کا نام' : 'Owner Name'} *
+                <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                  کھاتہ دار کا نام (Account Holder Name) *
                 </label>
                 <input
                   type="text"
                   value={accOwnerName}
                   onChange={e => setAccOwnerName(e.target.value)}
+                  placeholder="کھاتہ دار کا نام (Account Holder Name)"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
                 />
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {language === 'ur' ? 'موبائل نمبر' : 'Phone Number'}
+                <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                  موبائل نمبر (Phone Number)
                 </label>
                 <input
                   type="text"
                   value={accOwnerPhone}
                   onChange={e => setAccOwnerPhone(e.target.value)}
+                  placeholder="موبائل نمبر (Phone Number)"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono"
                 />
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {language === 'ur' ? 'شہر / پتہ' : 'City / Address'}
+                <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                  شہر / پتہ (City / Address)
                 </label>
                 <input
                   type="text"
                   value={accCity}
                   onChange={e => setAccCity(e.target.value)}
+                  placeholder="شہر / پتہ (City / Address)"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2"
                 />
               </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {language === 'ur' ? 'کرنسی' : 'Currency'}
-                </label>
-                <select
-                  value={accCurrency}
-                  onChange={e => setAccCurrency(e.target.value as Currency)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
-                >
-                  <option value="PKR">PKR (پاکستانی روپیہ)</option>
-                  <option value="AED">AED (اماراتی درہم)</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    کھاتہ آغاز تاریخ (Opening Date)
+                  </label>
+                  <input
+                    type="date"
+                    value={accOpenedDate}
+                    onChange={e => setAccOpenedDate(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    کرنسی (Currency)
+                  </label>
+                  <select
+                    value={accCurrency}
+                    onChange={e => setAccCurrency(e.target.value as Currency)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
+                  >
+                    <option value="PKR">PKR (پاکستانی روپیہ)</option>
+                    <option value="AED">AED (اماراتی درہم)</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
               <button
                 onClick={() => setIsEditingAccount(false)}
-                className="px-4 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                className="px-4 py-1.5 border border-slate-300 rounded-lg text-xs font-bold font-urdu-heading"
               >
-                {t('cancel')}
+                منسوخ کریں (Cancel)
               </button>
               <button
                 onClick={handleSaveAccountDetails}
-                className="flex items-center gap-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                className="flex items-center gap-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer font-urdu-heading"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>{t('save')}</span>
+                <span>محفوظ کریں (Save)</span>
               </button>
             </div>
           </div>
@@ -721,10 +829,10 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
       {/* Edit Single Amanat Entry Modal */}
       {editingEntry && selectedAccount && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200">
             <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
               <h3 className="font-bold text-sm sm:text-base font-urdu-heading">
-                {language === 'ur' ? 'پیسہ جمع اندراج میں ترمیم' : 'Edit Cash Jama History Entry'}
+                پیسہ جمع اندراج میں ترمیم (Edit Cash Jama Entry)
               </h3>
               <button
                 onClick={() => setEditingEntry(null)}
@@ -734,103 +842,135 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
               </button>
             </div>
             <div className="p-5 space-y-3 text-xs sm:text-sm">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">{t('date')}</label>
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    تاریخ اندراج (Custom Date) *
+                  </label>
                   <input
                     type="date"
                     value={entryDate}
                     onChange={e => setEntryDate(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">{t('type')}</label>
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    قسم اندراج (Entry Type) *
+                  </label>
                   <select
                     value={entryType}
                     onChange={e => setEntryType(e.target.value as AmanatEntryType)}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold font-urdu-heading"
                   >
-                    <option value="initial_deposit">{t('initial_deposit')}</option>
-                    <option value="additional_deposit">{t('additional_deposit')}</option>
-                    <option value="partial_withdrawal">{t('partial_withdrawal')}</option>
-                    <option value="full_return">{t('full_return')}</option>
-                    <option value="transfer_deduction">{t('transfer_deduction')}</option>
+                    <option value="initial_deposit">ابتدائی جمع رقم (Initial Deposit +)</option>
+                    <option value="additional_deposit">مزید جمع رقم (Deposit +)</option>
+                    <option value="returned_to_owner">رقم واپسی (Return Money -)</option>
+                    <option value="third_party_payment">تیسرے فریق کو ادائیگی (Third Party -)</option>
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {t('amount')} ({selectedAccount.currency}) *
+                <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                  رقم ({selectedAccount.currency}) *
                 </label>
                 <input
                   type="number"
+                  min="1"
+                  step="any"
                   value={entryAmount}
                   onChange={e => setEntryAmount(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono font-bold text-base"
+                  placeholder={`رقم (${selectedAccount.currency})`}
+                  className="w-full border-2 border-emerald-500 rounded-lg px-3 py-2 font-mono font-bold text-base"
                 />
               </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">{t('notes')}</label>
-                <input
-                  type="text"
-                  value={entryDesc}
-                  onChange={e => setEntryDesc(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    {language === 'ur' ? 'طریقہ کار' : 'Method'}
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    ادائیگی کا طریقہ (Payment Method)
                   </label>
                   <select
                     value={entryPaymentMethod}
                     onChange={e => setEntryPaymentMethod(e.target.value as PaymentMethod)}
                     className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
                   >
-                    <option value="Cash">Cash (نقد)</option>
-                    <option value="Bank">Bank (بینک)</option>
-                    <option value="Wallet">Wallet (والٹ)</option>
+                    <option value="Cash">نقد کیش (Cash)</option>
+                    <option value="Bank Transfer">بینک ٹرانسفر (Bank Transfer)</option>
+                    <option value="EasyPaisa">ایزی پیسہ (EasyPaisa)</option>
+                    <option value="JazzCash">جاز کیش (JazzCash)</option>
+                    <option value="NayaPay">نیا پے (NayaPay)</option>
+                    <option value="SadaPay">سدا پے (SadaPay)</option>
+                    <option value="Raast">راست (Raast)</option>
+                    <option value="Cheque">چیک (Cheque)</option>
+                    <option value="Other">دیگر (Other)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    {language === 'ur' ? 'بینک / والٹ نام' : 'Bank / Wallet Name'}
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    {entryType === 'initial_deposit' || entryType === 'additional_deposit'
+                      ? 'جمع کرانے والا (Deposited By)'
+                      : 'وصول کنندہ (Received By)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={entryRelatedPerson}
+                    onChange={e => setEntryRelatedPerson(e.target.value)}
+                    placeholder={
+                      entryType === 'initial_deposit' || entryType === 'additional_deposit'
+                        ? 'جمع کرانے والا (Deposited By)'
+                        : 'وصول کنندہ (Received By)'
+                    }
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-semibold"
+                  />
+                </div>
+              </div>
+              {entryPaymentMethod !== 'Cash' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                    بینک / والٹ نام (Bank / Wallet Name)
                   </label>
                   <input
                     type="text"
                     value={entryBankName}
                     onChange={e => setEntryBankName(e.target.value)}
+                    placeholder="بینک / والٹ نام (Bank / Wallet Name)"
                     className="w-full border border-slate-300 rounded-lg px-3 py-2"
                   />
                 </div>
-              </div>
+              )}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {language === 'ur' ? 'وصول کنندہ / متعلقہ شخص' : 'Related Person / Recipient'}
+                <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                  تفصیل / نوٹس (Description / Notes)
                 </label>
                 <input
                   type="text"
-                  value={entryRelatedPerson}
-                  onChange={e => setEntryRelatedPerson(e.target.value)}
+                  value={entryDesc}
+                  onChange={e => setEntryDesc(e.target.value)}
+                  placeholder="تفصیل / نوٹس (Description / Notes)"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2"
                 />
               </div>
             </div>
-            <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex justify-end gap-2">
+            <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => setEditingEntry(null)}
-                className="px-4 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                className="px-4 py-1.5 border border-slate-300 rounded-lg text-xs font-bold font-urdu-heading"
               >
-                {t('cancel')}
+                منسوخ کریں (Cancel)
               </button>
               <button
-                onClick={handleSaveEntryChanges}
-                className="flex items-center gap-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                onClick={() => handleSaveEntryChanges(false)}
+                className="flex items-center gap-1 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer font-urdu-heading"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>{t('save')}</span>
+                <span>محفوظ کریں (Save)</span>
+              </button>
+              <button
+                onClick={() => handleSaveEntryChanges(true)}
+                className="flex items-center gap-1 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold cursor-pointer font-urdu-heading"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>محفوظ کریں اور رسید پرنٹ کریں (Save & Print)</span>
               </button>
             </div>
           </div>

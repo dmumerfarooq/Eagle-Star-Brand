@@ -39,6 +39,7 @@ export const OrderRegisterView: React.FC = () => {
     currentUser,
     isSuperAdmin,
     canEditTransfers,
+    canDeleteTransfers,
     selectedOrderListStation,
     setSelectedOrderListStation
   } = useApp();
@@ -72,8 +73,9 @@ export const OrderRegisterView: React.FC = () => {
     setSelectedOrderListStation(st);
   };
 
-  // Quick inline edit state for station order (AED, Rate, PKR, Station)
+  // Quick inline edit state for station order (Date, AED, Rate, PKR, Station)
   const [quickEditOrder, setQuickEditOrder] = useState<MoneyTransfer | null>(null);
+  const [qeDate, setQeDate] = useState<string>('');
   const [qeStation, setQeStation] = useState<string>('');
   const [qeAed, setQeAed] = useState<string>('');
   const [qeRate, setQeRate] = useState<string>('');
@@ -189,6 +191,7 @@ export const OrderRegisterView: React.FC = () => {
   const handleStartQuickEdit = (ord: MoneyTransfer, e: React.MouseEvent) => {
     e.stopPropagation();
     setQuickEditOrder(ord);
+    setQeDate(ord.date || new Date().toISOString().split('T')[0]);
     setQeStation(findCanonicalStationName(ord.station) || ord.station);
     setQeAed(String(ord.amountAED || 0));
     setQeRate(String(ord.exchangeRate || settings.defaultExchangeRate || 77.5));
@@ -204,6 +207,7 @@ export const OrderRegisterView: React.FC = () => {
 
     const updatedOrder: MoneyTransfer = {
       ...quickEditOrder,
+      date: qeDate || quickEditOrder.date,
       station: qeStation,
       amountAED: Number(parsedAed.toFixed(2)),
       exchangeRate: Number(parsedRate.toFixed(2)),
@@ -533,7 +537,19 @@ export const OrderRegisterView: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 text-xs">
+            <div>
+              <label className="block font-bold text-slate-800 mb-1">
+                {language === 'ur' ? 'تاریخ (Custom Date)' : 'Date'}
+              </label>
+              <input
+                type="date"
+                value={qeDate}
+                onChange={e => setQeDate(e.target.value)}
+                className="w-full bg-white border border-amber-400 rounded-lg p-2 font-mono font-bold text-slate-950"
+              />
+            </div>
+
             <div>
               <label className="block font-bold text-slate-800 mb-1">
                 {language === 'ur' ? 'اسٹیشن (Station)' : 'Station'}
@@ -942,7 +958,7 @@ export const OrderRegisterView: React.FC = () => {
                                   >
                                     <FileText className="w-3.5 h-3.5" />
                                   </button>
-                                  {isSuperAdmin && (
+                                  {(isSuperAdmin || canDeleteTransfers) && (
                                     <button
                                       type="button"
                                       onClick={() => setOrderToDelete(ord)}

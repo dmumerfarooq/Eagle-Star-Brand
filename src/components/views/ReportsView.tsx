@@ -583,10 +583,6 @@ export const ReportsView: React.FC = () => {
               className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800"
             >
               <option value="all">{language === 'ur' ? 'تمام حالات (Status)' : 'All Statuses'}</option>
-              <option value="Draft">{language === 'ur' ? 'ڈرافٹ (Draft)' : 'Draft'}</option>
-              <option value="Received">{language === 'ur' ? 'موصول شدہ (Received)' : 'Received'}</option>
-              <option value="Partially Paid">{language === 'ur' ? 'جزوی ادا شدہ' : 'Partially Paid'}</option>
-              <option value="Paid">{language === 'ur' ? 'مکمل ادا شدہ (Paid)' : 'Paid'}</option>
               <option value="Completed">{language === 'ur' ? 'مکمل پروسیسڈ (Completed)' : 'Completed'}</option>
               <option value="Cancelled">{language === 'ur' ? 'منسوخ (Cancelled)' : 'Cancelled'}</option>
             </select>
@@ -600,7 +596,6 @@ export const ReportsView: React.FC = () => {
             >
               <option value="all">{language === 'ur' ? 'تمام ادھار حالت' : 'All Loan Statuses'}</option>
               <option value="Outstanding">{language === 'ur' ? 'باقی واجب الادا (Outstanding)' : 'Outstanding'}</option>
-              <option value="Partially Repaid">{language === 'ur' ? 'جزوی وصول شدہ' : 'Partially Repaid'}</option>
               <option value="Overdue">{language === 'ur' ? 'میعاد ختم / اوور ڈیو' : 'Overdue'}</option>
               <option value="Fully Repaid">{language === 'ur' ? 'مکمل بے باق (Paid)' : 'Fully Repaid'}</option>
             </select>
@@ -780,8 +775,6 @@ export const ReportsView: React.FC = () => {
                   <th className="p-3 text-right">{t('amountAed')}</th>
                   <th className="p-3 text-right">{t('rate')}</th>
                   <th className="p-3 text-right">{language === 'ur' ? 'کل رقم PKR' : 'Total PKR'}</th>
-                  <th className="p-3 text-right">{language === 'ur' ? 'ادا شدہ' : 'Paid'}</th>
-                  <th className="p-3 text-right">{language === 'ur' ? 'باقی' : 'Remaining'}</th>
                   <th className="p-3 text-center">{t('status')}</th>
                   <th className="p-3 text-center">{language === 'ur' ? 'پرنٹ / رسید' : 'Action'}</th>
                 </tr>
@@ -789,7 +782,7 @@ export const ReportsView: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {filteredTransfers.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="text-center py-8 text-slate-500 font-medium">
+                    <td colSpan={11} className="text-center py-8 text-slate-500 font-medium">
                       {language === 'ur' ? 'کوئی ترسیل ریکارڈ دستیاب نہیں ہے' : 'No transfers match current filter'}
                     </td>
                   </tr>
@@ -817,23 +810,9 @@ export const ReportsView: React.FC = () => {
                       <td className="p-3 text-right font-mono font-bold text-slate-900">
                         {formatMoney(tr.amountPKR, 'PKR')}
                       </td>
-                      <td className="p-3 text-right font-mono font-semibold text-emerald-700">
-                        {formatMoney(tr.amountPaidPKR, 'PKR')}
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-rose-700">
-                        {formatMoney(tr.remainingBalancePKR, 'PKR')}
-                      </td>
                       <td className="p-3 text-center whitespace-nowrap">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            tr.status === 'Paid' || tr.status === 'Completed'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : tr.status === 'Partially Paid'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-rose-100 text-rose-800'
-                          }`}
-                        >
-                          {t(tr.status)}
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {t('Completed')}
                         </span>
                       </td>
                       <td className="p-3 text-center">
@@ -922,7 +901,7 @@ export const ReportsView: React.FC = () => {
                       <td className="p-3 font-bold text-slate-900">{l.borrowerName}</td>
                       <td className="p-3 font-mono text-slate-600">{l.borrowerPhone}</td>
                       <td className="p-3 font-mono text-slate-600 whitespace-nowrap">{l.loanDate}</td>
-                      <td className="p-3 font-mono text-rose-700 font-semibold whitespace-nowrap">{l.dueDate}</td>
+                      <td className="p-3 font-mono text-rose-700 font-semibold whitespace-nowrap">{l.dueDate || '—'}</td>
                       <td className="p-3 text-right font-mono font-bold text-slate-900">
                         {formatMoney(l.originalAmount, l.currency)}
                       </td>

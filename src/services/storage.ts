@@ -18,11 +18,13 @@ import {
   Station,
   PaymentMethod,
   StationTransactionType,
-  StationLedgerEntry
+  StationLedgerEntry,
+  CurrencyConfig
 } from '../types';
 import { generateMySQLDump } from './mysqlExporter';
 
 const STORAGE_KEYS = {
+  INITIALIZED: 'pk_dubai_initialized_v1',
   CUSTOMERS: 'pk_dubai_customers_v1',
   RECEIVERS: 'pk_dubai_receivers_v1',
   TRANSFERS: 'pk_dubai_transfers_v1',
@@ -60,6 +62,15 @@ export const defaultSavedBanks: string[] = [
   'Raast ID (راست)'
 ];
 
+export const defaultCurrencies: CurrencyConfig[] = [
+  { code: 'AED', nameEn: 'UAE Dirham (AED)', nameUr: 'درہم (AED)', symbol: 'AED', rateToPKR: 77.50 },
+  { code: 'PKR', nameEn: 'Pakistani Rupees (PKR)', nameUr: 'پاکستانی روپے (PKR)', symbol: 'PKR', rateToPKR: 1.00 },
+  { code: 'SAR', nameEn: 'Saudi Riyal (SAR)', nameUr: 'سعودی ریال (SAR)', symbol: 'SAR', rateToPKR: 74.20 },
+  { code: 'USD', nameEn: 'US Dollar (USD)', nameUr: 'امریکی ڈالر (USD)', symbol: 'USD', rateToPKR: 278.50 },
+  { code: 'OMR', nameEn: 'Omani Rial (OMR)', nameUr: 'عمانی ریال (OMR)', symbol: 'OMR', rateToPKR: 722.00 },
+  { code: 'GBP', nameEn: 'British Pound (GBP)', nameUr: 'برطانوی پاؤنڈ (GBP)', symbol: 'GBP', rateToPKR: 355.00 }
+];
+
 export const defaultSettings: BusinessSettings = {
   businessNameEn: 'Eagle Star Brand',
   businessNameUr: 'ایگل اسٹار برانڈ',
@@ -72,6 +83,8 @@ export const defaultSettings: BusinessSettings = {
   whatsapp: '+971501234567',
   email: 'info@eaglestarbrand.com',
   defaultExchangeRate: 77.50,
+  defaultTransferCurrency: 'AED',
+  currencies: defaultCurrencies,
   manualRateUpdatedAt: '2026-10-27T10:00:00Z',
   manualRateUpdatedBy: 'Super Admin (dsumerf@gmail.com)',
   defaultCommissionPct: 1.0,
@@ -693,24 +706,24 @@ export const demoTransfers: MoneyTransfer[] = [
     additionalCharges: 0,
     totalCollectedAED: 404,
     netPayablePKR: 30000,
-    amountPaidPKR: 15000,
-    remainingBalancePKR: 15000,
-    status: 'Partially Paid',
+    amountPaidPKR: 30000,
+    remainingBalancePKR: 0,
+    status: 'Completed',
     payouts: [
       {
         id: 'pay-3',
         transferId: 'tr-3',
         date: '2026-10-26',
         receiverName: 'Gul Faraz Khan',
-        amountPKR: 15000,
+        amountPKR: 30000,
         paymentMethod: 'Cash',
         referenceNo: 'COUNTER-MR-2',
         station: 'میرعلی',
-        notes: 'Partial payout collected, remaining 15,000 PKR pending',
+        notes: 'Full payout completed',
         receiptNo: 'PAY-10914-A'
       }
     ],
-    notes: 'Two-phase installment payout',
+    notes: 'Station counter transfer',
     createdAt: '2026-10-26T12:00:00Z'
   },
   {
@@ -739,24 +752,24 @@ export const demoTransfers: MoneyTransfer[] = [
     additionalCharges: 0,
     totalCollectedAED: 1010,
     netPayablePKR: 75000,
-    amountPaidPKR: 25000,
-    remainingBalancePKR: 50000,
-    status: 'Partially Paid',
+    amountPaidPKR: 75000,
+    remainingBalancePKR: 0,
+    status: 'Completed',
     payouts: [
       {
         id: 'pay-4',
         transferId: 'tr-4',
         date: '2026-10-27',
         receiverName: 'Noor Muhammad',
-        amountPKR: 25000,
+        amountPKR: 75000,
         paymentMethod: 'JazzCash',
         referenceNo: 'JC-881239',
         station: 'جیز کیش',
-        notes: 'Testing workflow: AED 1000 @ 75 = 75,000 PKR, partial payout 25,000, remaining 50,000 PKR',
+        notes: 'Full JazzCash transfer payout',
         receiptNo: 'PAY-10915-1'
       }
     ],
-    notes: 'Matches master prompt workflow test scenario 1',
+    notes: 'JazzCash transfer',
     createdAt: '2026-10-27T05:20:00Z'
   },
   {
@@ -1020,10 +1033,19 @@ export const demoLedger: LedgerEntry[] = [
 ];
 
 class StorageService {
+  private syncQueue: Promise<void> = Promise.resolve();
+
   private load<T>(key: string, fallback: T): T {
     try {
       const data = localStorage.getItem(key);
-      if (!data) return fallback;
+      if (data === null || data === undefined) {
+        // Once the application has been initialized, deleted collections remain empty
+        const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED) === 'true';
+        if (isInitialized && Array.isArray(fallback)) {
+          return [] as unknown as T;
+        }
+        return fallback;
+      }
       return JSON.parse(data) as T;
     } catch {
       return fallback;
@@ -1032,15 +1054,24 @@ class StorageService {
 
   private save<T>(key: string, data: T): void {
     try {
-      localStorage.setItem(key, JSON.stringify(data));
+      const serialized = JSON.stringify(data);
+      localStorage.setItem(key, serialized);
+      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
       if (key !== STORAGE_KEYS.AUTH_USER && key !== STORAGE_KEYS.LANG) {
-        fetch('/api/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, data })
-        }).catch(() => {
-          // Offline or static fallback: localStorage remains authoritative
-        });
+        const payload = JSON.stringify({ key, data });
+        const useKeepalive = payload.length < 60000;
+        this.syncQueue = this.syncQueue
+          .then(() =>
+            fetch('/api/state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+              ...(useKeepalive ? { keepalive: true } : {})
+            }).then(() => undefined)
+          )
+          .catch(() => {
+            // Offline or static fallback: localStorage remains authoritative
+          });
       }
     } catch (e) {
       console.error(`Error saving to localStorage key ${key}:`, e);
@@ -1049,7 +1080,7 @@ class StorageService {
 
   async syncWithServer(): Promise<boolean> {
     try {
-      const res = await fetch('/api/state');
+      const res = await fetch('/api/state', { cache: 'no-store' });
       if (!res.ok) return false;
       const payload = await res.json();
       const serverStore = payload?.store as Record<string, unknown> | undefined;
@@ -1075,28 +1106,40 @@ class StorageService {
             localStorage.setItem(k, JSON.stringify(serverStore[k]));
           }
         }
+        localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
         return true;
       } else {
-        // Seed the Node.js server store with current client state
-        const initialStore: Record<string, unknown> = {
-          [STORAGE_KEYS.CUSTOMERS]: this.getCustomers(),
-          [STORAGE_KEYS.RECEIVERS]: this.getReceivers(),
-          [STORAGE_KEYS.TRANSFERS]: this.getTransfers(),
-          [STORAGE_KEYS.LOANS]: this.getLoans(),
-          [STORAGE_KEYS.AMANAT]: this.getAmanatAccounts(),
-          [STORAGE_KEYS.LEDGER]: this.getLedgerEntries(),
-          [STORAGE_KEYS.SETTINGS]: this.getSettings(),
-          [STORAGE_KEYS.USERS]: this.getUsers(),
-          [STORAGE_KEYS.STATIONS]: this.getStations(),
-          [STORAGE_KEYS.SAVED_BANKS]: this.getSavedBanks()
-        };
-        await fetch('/api/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ store: initialStore })
-        });
+        await this.pushAllToServer();
         return false;
       }
+    } catch {
+      return false;
+    }
+  }
+
+  async pushAllToServer(): Promise<boolean> {
+    try {
+      const fullStore: Record<string, unknown> = {
+        [STORAGE_KEYS.CUSTOMERS]: this.getCustomers(),
+        [STORAGE_KEYS.RECEIVERS]: this.getReceivers(),
+        [STORAGE_KEYS.TRANSFERS]: this.getTransfers(),
+        [STORAGE_KEYS.LOANS]: this.getLoans(),
+        [STORAGE_KEYS.AMANAT]: this.getAmanatAccounts(),
+        [STORAGE_KEYS.LEDGER]: this.getLedgerEntries(),
+        [STORAGE_KEYS.SETTINGS]: this.getSettings(),
+        [STORAGE_KEYS.USERS]: this.getUsers(),
+        [STORAGE_KEYS.STATIONS]: this.getStations(),
+        [STORAGE_KEYS.SAVED_BANKS]: this.getSavedBanks()
+      };
+      const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store: fullStore })
+      });
+      if (res.ok) {
+        localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+      }
+      return res.ok;
     } catch {
       return false;
     }
@@ -1150,20 +1193,13 @@ class StorageService {
   deleteCustomer(id: string): void {
     const list = this.getCustomers().filter(c => c.id !== id);
     this.save(STORAGE_KEYS.CUSTOMERS, list);
+    const receivers = this.getReceivers().filter(r => r.customerId !== id);
+    this.save(STORAGE_KEYS.RECEIVERS, receivers);
   }
 
   // Receivers
   getReceivers(): Receiver[] {
-    const list = this.load<Receiver[]>(STORAGE_KEYS.RECEIVERS, demoReceivers);
-    if (list.length > 0 && !list.some(r => r.id === 'rec-5')) {
-      const r5 = demoReceivers.find(r => r.id === 'rec-5');
-      if (r5 && list.length <= 4) {
-        const merged = [...list, r5];
-        this.save(STORAGE_KEYS.RECEIVERS, merged);
-        return merged;
-      }
-    }
-    return list;
+    return this.load<Receiver[]>(STORAGE_KEYS.RECEIVERS, demoReceivers);
   }
 
   saveReceiver(receiver: Receiver): Receiver {
@@ -1271,16 +1307,16 @@ class StorageService {
 
   // Transfers
   getTransfers(): MoneyTransfer[] {
-    const list = this.load<MoneyTransfer[]>(STORAGE_KEYS.TRANSFERS, demoTransfers);
-    if (list.length > 0 && !list.some(t => t.id === 'tr-5')) {
-      const tr5 = demoTransfers.find(t => t.id === 'tr-5');
-      if (tr5 && list.length <= 4) {
-        const merged = [...list, tr5];
-        this.save(STORAGE_KEYS.TRANSFERS, merged);
-        return merged;
-      }
-    }
-    return list;
+    const raw = this.load<MoneyTransfer[]>(STORAGE_KEYS.TRANSFERS, demoTransfers);
+    return raw.map(t => {
+      const fullPayable = Number(t.netPayablePKR || t.amountPKR || 0);
+      return {
+        ...t,
+        amountPaidPKR: fullPayable,
+        remainingBalancePKR: 0,
+        status: t.status === 'Cancelled' ? 'Cancelled' : 'Completed'
+      };
+    });
   }
 
   saveTransfer(transfer: MoneyTransfer): MoneyTransfer {
@@ -1295,7 +1331,13 @@ class StorageService {
           s.code === stationName
       );
 
-    let finalTransfer: MoneyTransfer = { ...transfer };
+    const fullPayable = Number(transfer.netPayablePKR || transfer.amountPKR || 0);
+    let finalTransfer: MoneyTransfer = {
+      ...transfer,
+      amountPaidPKR: fullPayable,
+      remainingBalancePKR: 0,
+      status: transfer.status === 'Cancelled' ? 'Cancelled' : 'Completed'
+    };
 
     if (existingIndex >= 0) {
       finalTransfer.updatedAt = new Date().toISOString();
@@ -1751,29 +1793,78 @@ class StorageService {
   }
 
   // Loans (Khata)
+  private recalculateLoanBalances(loan: Loan): Loan {
+    const rawEntries = loan.repayments || [];
+    const sumAdditional = rawEntries
+      .filter(r => r.entryType === 'additional_loan')
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
+    const baseInitial =
+      loan.initialAmount !== undefined && Number(loan.initialAmount) >= 0
+        ? Number(loan.initialAmount)
+        : Math.max(0, (Number(loan.originalAmount) || 0) - sumAdditional);
+
+    let runningBalance = baseInitial;
+    let totalRepaid = 0;
+    let totalAdditional = 0;
+
+    const normalizedEntries: LoanRepayment[] = rawEntries.map(r => {
+      const prevBal = runningBalance;
+      const amt = Math.max(0, Number(r.amount) || 0);
+      const entryType = r.entryType || 'repayment';
+      if (entryType === 'additional_loan') {
+        runningBalance = prevBal + amt;
+        totalAdditional += amt;
+      } else {
+        runningBalance = Math.max(0, prevBal - amt);
+        totalRepaid += amt;
+      }
+      return {
+        ...r,
+        entryType,
+        amount: amt,
+        currency: loan.currency,
+        previousBalance: prevBal,
+        newBalance: runningBalance
+      };
+    });
+
+    const totalLoanTaken = baseInitial + totalAdditional;
+    const remainingBalance = Math.max(0, runningBalance);
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    let computedStatus: Loan['status'] = loan.status;
+    if (remainingBalance === 0 && totalLoanTaken > 0) {
+      computedStatus = 'Fully Repaid';
+    } else if (loan.dueDate && loan.dueDate < todayStr && remainingBalance > 0) {
+      computedStatus = 'Overdue';
+    } else {
+      computedStatus = 'Outstanding';
+    }
+
+    return {
+      ...loan,
+      initialAmount: baseInitial,
+      originalAmount: totalLoanTaken,
+      totalRepaid,
+      remainingBalance,
+      repayments: normalizedEntries,
+      status: computedStatus
+    };
+  }
+
   getLoans(): Loan[] {
-    return this.load<Loan[]>(STORAGE_KEYS.LOANS, demoLoans);
+    const raw = this.load<Loan[]>(STORAGE_KEYS.LOANS, demoLoans);
+    return raw.map(l => this.recalculateLoanBalances(l));
   }
 
   saveLoan(loan: Loan): Loan {
     const list = this.getLoans();
     const idx = list.findIndex(l => l.id === loan.id);
-    const totalRepaid = (loan.repayments || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    const remainingBalance = Math.max(0, (Number(loan.originalAmount) || 0) - totalRepaid);
-    const computedStatus =
-      remainingBalance === 0 && (Number(loan.originalAmount) || 0) > 0
-        ? 'Fully Repaid'
-        : totalRepaid > 0
-        ? 'Partially Repaid'
-        : loan.status === 'Fully Repaid' || loan.status === 'Partially Repaid'
-        ? 'Outstanding'
-        : loan.status;
+    const recalculated = this.recalculateLoanBalances(loan);
 
     const normalizedLoan: Loan = {
-      ...loan,
-      totalRepaid,
-      remainingBalance,
-      status: computedStatus,
+      ...recalculated,
       updatedAt: idx >= 0 ? new Date().toISOString() : loan.updatedAt
     };
 
@@ -1791,7 +1882,7 @@ class StorageService {
           return {
             ...le,
             date: normalizedLoan.loanDate,
-            amount: normalizedLoan.originalAmount,
+            amount: normalizedLoan.initialAmount ?? normalizedLoan.originalAmount,
             currency: normalizedLoan.currency,
             partyName: normalizedLoan.borrowerName,
             description: `Khata Loan (${normalizedLoan.loanNo}) disbursed to ${normalizedLoan.borrowerName}: ${normalizedLoan.purpose}`,
@@ -1810,7 +1901,7 @@ class StorageService {
         date: normalizedLoan.loanDate,
         type: 'cash_out',
         category: 'loan_disbursed',
-        amount: normalizedLoan.originalAmount,
+        amount: normalizedLoan.initialAmount ?? normalizedLoan.originalAmount,
         currency: normalizedLoan.currency,
         referenceId: normalizedLoan.receiptNo || normalizedLoan.loanNo,
         partyName: normalizedLoan.borrowerName,
@@ -1844,34 +1935,30 @@ class StorageService {
     const loan = loans.find(l => l.id === loanId);
     if (!loan) return null;
 
-    const updatedRepayments = [...(loan.repayments || []), repayment];
-    const totalRepaid = updatedRepayments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-    const remaining = Math.max(0, loan.originalAmount - totalRepaid);
-    const newStatus = remaining === 0 ? 'Fully Repaid' : 'Partially Repaid';
+    const entryType = repayment.entryType || 'repayment';
+    const updatedRepayments = [...(loan.repayments || []), { ...repayment, entryType }];
 
-    const updatedLoan: Loan = {
+    const updatedLoan = this.saveLoan({
       ...loan,
-      totalRepaid,
-      remainingBalance: remaining,
-      status: newStatus,
       repayments: updatedRepayments,
       updatedAt: new Date().toISOString()
-    };
-
-    this.saveLoan(updatedLoan);
+    });
 
     // Cash ledger
+    const isAdditionalLoan = entryType === 'additional_loan';
     this.addLedgerEntry({
       id: `led-${Date.now()}`,
       date: repayment.date,
-      type: 'cash_in',
-      category: 'loan_repayment',
+      type: isAdditionalLoan ? 'cash_out' : 'cash_in',
+      category: isAdditionalLoan ? 'loan_disbursed' : 'loan_repayment',
       amount: repayment.amount,
-      currency: repayment.currency,
+      currency: updatedLoan.currency,
       referenceId: repayment.receiptNo,
       partyName: loan.borrowerName,
       paymentMethod: repayment.paymentMethod,
-      description: `Loan repayment received from ${loan.borrowerName} (${loan.loanNo})`
+      description: isAdditionalLoan
+        ? `Additional Khata Loan given to ${loan.borrowerName} (${loan.loanNo})${repayment.notes ? `: ${repayment.notes}` : ''}`
+        : `Loan repayment received from ${loan.borrowerName} (${loan.loanNo})${repayment.notes ? `: ${repayment.notes}` : ''}`
     });
 
     return updatedLoan;
@@ -1894,6 +1981,7 @@ class StorageService {
         ? {
             ...r,
             ...updatedData,
+            entryType: updatedData.entryType || r.entryType || 'repayment',
             amount: Number(updatedData.amount ?? r.amount),
             updatedAt: new Date().toISOString()
           }
@@ -1905,16 +1993,22 @@ class StorageService {
       repayments: updatedRepayments
     });
 
-    // Sync central Cash Ledger entry for this repayment
+    // Sync central Cash Ledger entry for this repayment / additional loan
+    const finalEntryType = updatedData.entryType || targetRep.entryType || 'repayment';
+    const isAdditionalLoan = finalEntryType === 'additional_loan';
     const ledgerList = this.getLedgerEntries();
     const syncedLedger = ledgerList.map(le =>
       le.referenceId === targetRep.receiptNo
         ? {
             ...le,
             date: updatedData.date || le.date,
+            type: (isAdditionalLoan ? 'cash_out' : 'cash_in') as 'cash_in' | 'cash_out',
+            category: (isAdditionalLoan ? 'loan_disbursed' : 'loan_repayment') as LedgerEntry['category'],
             amount: Number(updatedData.amount ?? le.amount),
             paymentMethod: updatedData.paymentMethod || le.paymentMethod,
-            description: `Loan repayment received from ${loan.borrowerName} (${loan.loanNo})`,
+            description: isAdditionalLoan
+              ? `Additional Khata Loan given to ${loan.borrowerName} (${loan.loanNo})`
+              : `Loan repayment received from ${loan.borrowerName} (${loan.loanNo})`,
             updatedAt: new Date().toISOString()
           }
         : le
@@ -1962,10 +2056,45 @@ class StorageService {
 
     let updated: AmanatAccount[];
     if (idx >= 0) {
+      const oldAcc = list[idx];
       updated = [...list];
       updated[idx] = normalizedAccount;
+
+      if (oldAcc.ownerName !== normalizedAccount.ownerName) {
+        const receiptSet = new Set((normalizedAccount.entries || []).map(e => e.receiptNo));
+        const ledgerList = this.getLedgerEntries();
+        let ledChanged = false;
+        const syncedLedger = ledgerList.map(le => {
+          if (le.referenceId && receiptSet.has(le.referenceId)) {
+            ledChanged = true;
+            return { ...le, partyName: normalizedAccount.ownerName, updatedAt: new Date().toISOString() };
+          }
+          return le;
+        });
+        if (ledChanged) {
+          this.save(STORAGE_KEYS.LEDGER, syncedLedger);
+        }
+      }
     } else {
       updated = [normalizedAccount, ...list];
+      const initEntry = (normalizedAccount.entries || [])[0];
+      if (initEntry && initEntry.amount > 0) {
+        const existingLed = this.getLedgerEntries().some(le => le.referenceId === initEntry.receiptNo);
+        if (!existingLed) {
+          this.addLedgerEntry({
+            id: `led-amn-${Date.now()}`,
+            date: initEntry.date,
+            type: 'cash_in',
+            category: 'amanat_deposit',
+            amount: initEntry.amount,
+            currency: initEntry.currency || normalizedAccount.currency,
+            referenceId: initEntry.receiptNo,
+            partyName: normalizedAccount.ownerName,
+            paymentMethod: initEntry.paymentMethod || 'Cash',
+            description: `Amanat: ${initEntry.description} (${normalizedAccount.ownerName})${initEntry.bankName ? ` - ${initEntry.bankName}` : ''}`
+          });
+        }
+      }
     }
     this.save(STORAGE_KEYS.AMANAT, updated);
     return normalizedAccount;
@@ -2171,17 +2300,40 @@ class StorageService {
             ? settings.receiptFooterUr
             : defaultSettings.receiptFooterUr
       };
-      this.save(STORAGE_KEYS.SETTINGS, updated);
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
       return updated;
     }
+    const mergedCurrencies =
+      settings.currencies && settings.currencies.length > 0
+        ? settings.currencies
+        : defaultCurrencies.map(c =>
+            c.code === 'AED' && settings.defaultExchangeRate
+              ? { ...c, rateToPKR: settings.defaultExchangeRate }
+              : c
+          );
+
     return {
       ...defaultSettings,
-      ...settings
+      ...settings,
+      defaultTransferCurrency: settings.defaultTransferCurrency || 'AED',
+      currencies: mergedCurrencies
     };
   }
 
   saveSettings(settings: BusinessSettings): void {
-    this.save(STORAGE_KEYS.SETTINGS, settings);
+    const syncedCurrencies = (settings.currencies || defaultCurrencies).map(c =>
+      c.code === 'AED' && settings.defaultExchangeRate
+        ? { ...c, rateToPKR: settings.defaultExchangeRate }
+        : c
+    );
+    this.save(STORAGE_KEYS.SETTINGS, {
+      ...settings,
+      currencies: syncedCurrencies
+    });
   }
 
   // Language
@@ -2213,16 +2365,16 @@ class StorageService {
       const currentSA = list[superAdminIndex];
       if (
         currentSA.role !== 'super_admin' ||
-        currentSA.password !== 'Umer@321!Farooq' ||
+        !currentSA.password ||
         currentSA.status !== 'active'
       ) {
         list[superAdminIndex] = {
           ...currentSA,
           username: 'dsumerf@gmail.com',
           role: 'super_admin',
-          password: 'Umer@321!Farooq',
-          fullName: 'Umer Farooq',
-          fullNameUr: 'عمر فاروق (سپر ایڈمن - مکمل اختیارات)',
+          password: currentSA.password || 'Umer@321!Farooq',
+          fullName: currentSA.fullName || 'Umer Farooq',
+          fullNameUr: currentSA.fullNameUr || 'عمر فاروق (سپر ایڈمن - مکمل اختیارات)',
           status: 'active',
           stationAccess: 'all',
           permissions: {
@@ -2240,21 +2392,17 @@ class StorageService {
       }
     }
 
-    // Ensure 'admin' user exists with password 'Eagle@321!Brand' and role 'admin'
+    // Ensure 'admin' user exists while preserving any edits made by Super Admin
     const adminIndex = list.findIndex(u => u.username.toLowerCase() === 'admin');
     if (adminIndex === -1) {
       list = [...list, defaultUsers[1]];
       changed = true;
     } else {
       const currentAdmin = list[adminIndex];
-      if (currentAdmin.role !== 'admin' || currentAdmin.password !== 'Eagle@321!Brand') {
+      if (!currentAdmin.password) {
         list[adminIndex] = {
           ...currentAdmin,
-          role: 'admin',
-          password: 'Eagle@321!Brand',
-          fullName: 'System Administrator',
-          fullNameUr: 'ایڈمنسٹریٹر (کاروباری ڈیٹا اختیارات)',
-          status: 'active'
+          password: 'Eagle@321!Brand'
         };
         changed = true;
       }
@@ -2277,7 +2425,11 @@ class StorageService {
     });
 
     if (changed) {
-      this.save(STORAGE_KEYS.USERS, list);
+      try {
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(list));
+      } catch {
+        // ignore
+      }
     }
     return list;
   }
@@ -2331,12 +2483,7 @@ class StorageService {
 
   // Stations Management
   getStations(): Station[] {
-    const list = this.load<Station[]>(STORAGE_KEYS.STATIONS, defaultStations);
-    if (!list || list.length === 0) {
-      this.save(STORAGE_KEYS.STATIONS, defaultStations);
-      return defaultStations;
-    }
-    return list;
+    return this.load<Station[]>(STORAGE_KEYS.STATIONS, defaultStations);
   }
 
   saveStation(station: Station): Station {
@@ -2397,6 +2544,17 @@ class StorageService {
     const list = this.getStations();
     const station = list.find(s => s.id === id);
     if (!station) return false;
+    const depositReceiptNos = new Set(
+      (station.entries || [])
+        .filter(e => e.type !== 'transfer_payout' && e.receiptNo)
+        .map(e => e.receiptNo)
+    );
+    if (depositReceiptNos.size > 0) {
+      const filteredLedger = this.getLedgerEntries().filter(
+        le => !le.referenceId || !depositReceiptNos.has(le.referenceId)
+      );
+      this.save(STORAGE_KEYS.LEDGER, filteredLedger);
+    }
     const filtered = list.filter(s => s.id !== id);
     this.save(STORAGE_KEYS.STATIONS, filtered);
     return true;
@@ -2404,12 +2562,7 @@ class StorageService {
 
   // Saved & Custom Bank Names Management
   getSavedBanks(): string[] {
-    const list = this.load<string[]>(STORAGE_KEYS.SAVED_BANKS, defaultSavedBanks);
-    if (!list || list.length === 0) {
-      this.save(STORAGE_KEYS.SAVED_BANKS, defaultSavedBanks);
-      return defaultSavedBanks;
-    }
-    return list;
+    return this.load<string[]>(STORAGE_KEYS.SAVED_BANKS, defaultSavedBanks);
   }
 
   addSavedBank(bankName: string): string[] {
@@ -2650,33 +2803,52 @@ class StorageService {
       this.save(STORAGE_KEYS.LEDGER, syncedLedger);
     }
 
-    // If this entry is linked to a transfer order, sync the transfer order as well
+    // Sync all transfers linked to any recalculated entries in this station
+    const allTransfers = this.getTransfers();
+    let transfersChanged = false;
+    const entryByRef = new Map<string, StationLedgerEntry>();
+    for (const e of entries) {
+      if (e.referenceNo) entryByRef.set(e.referenceNo, e);
+    }
     const refNo = entries[targetIdx].referenceNo;
-    if (refNo) {
-      const allTransfers = this.getTransfers();
-      const trIdx = allTransfers.findIndex(t => t.orderNumber === refNo);
-      if (trIdx !== -1) {
-        const oldTr = allTransfers[trIdx];
-        const updatedTransfers = [...allTransfers];
-        updatedTransfers[trIdx] = {
-          ...oldTr,
+    const updatedTransfers = allTransfers.map(t => {
+      if (refNo && t.orderNumber === refNo) {
+        transfersChanged = true;
+        return {
+          ...t,
           date: entryData.date,
           amountPKR: entryData.amountPKR,
           netPayablePKR: entryData.amountPKR,
-          amountPaidPKR: oldTr.status === 'Completed' ? entryData.amountPKR : oldTr.amountPaidPKR,
+          amountPaidPKR: t.status === 'Completed' ? entryData.amountPKR : t.amountPaidPKR,
           amountAED: effectiveAed,
           exchangeRate: effectiveRate,
-          totalCollectedAED: effectiveAed + (oldTr.commissionAmount || 0),
-          receiverName: entryData.relatedParty || oldTr.receiverName,
-          payoutMethod: entryData.paymentMethod || oldTr.payoutMethod,
-          bankName: entryData.bankName || oldTr.bankName,
-          accountNumber: entryData.accountNumber || oldTr.accountNumber,
+          totalCollectedAED: effectiveAed + (t.commissionAmount || 0),
+          receiverName: entryData.relatedParty || t.receiverName,
+          payoutMethod: entryData.paymentMethod || t.payoutMethod,
+          bankName: entryData.bankName || t.bankName,
+          accountNumber: entryData.accountNumber || t.accountNumber,
           stationPreviousBalancePKR: entries[targetIdx].previousBalancePKR,
           stationNewBalancePKR: entries[targetIdx].newBalancePKR,
           updatedAt: new Date().toISOString()
         };
-        this.save(STORAGE_KEYS.TRANSFERS, updatedTransfers);
       }
+      const matchedEntry = entryByRef.get(t.orderNumber);
+      if (
+        matchedEntry &&
+        (t.stationPreviousBalancePKR !== matchedEntry.previousBalancePKR ||
+          t.stationNewBalancePKR !== matchedEntry.newBalancePKR)
+      ) {
+        transfersChanged = true;
+        return {
+          ...t,
+          stationPreviousBalancePKR: matchedEntry.previousBalancePKR,
+          stationNewBalancePKR: matchedEntry.newBalancePKR
+        };
+      }
+      return t;
+    });
+    if (transfersChanged) {
+      this.save(STORAGE_KEYS.TRANSFERS, updatedTransfers);
     }
 
     return updatedStation;
@@ -2730,13 +2902,41 @@ class StorageService {
       this.save(STORAGE_KEYS.LEDGER, filteredLedger);
     }
 
+    // Sync running station balances on any remaining transfers in this station
+    const allTransfers = this.getTransfers();
+    let trChanged = false;
+    const entryByRef = new Map<string, StationLedgerEntry>();
+    for (const e of remainingEntries) {
+      if (e.referenceNo) entryByRef.set(e.referenceNo, e);
+    }
+    const syncedTransfers = allTransfers.map(t => {
+      const matched = entryByRef.get(t.orderNumber);
+      if (
+        matched &&
+        (t.stationPreviousBalancePKR !== matched.previousBalancePKR ||
+          t.stationNewBalancePKR !== matched.newBalancePKR)
+      ) {
+        trChanged = true;
+        return {
+          ...t,
+          stationPreviousBalancePKR: matched.previousBalancePKR,
+          stationNewBalancePKR: matched.newBalancePKR
+        };
+      }
+      return t;
+    });
+    if (trChanged) {
+      this.save(STORAGE_KEYS.TRANSFERS, syncedTransfers);
+    }
+
     return updatedStation;
   }
 
   // Full backup & restore
   exportAllData(): string {
     const data = {
-      version: '1.0',
+      appName: 'Eagle Star Brand (ایگل اسٹار برانڈ)',
+      version: '2.0',
       exportedAt: new Date().toISOString(),
       customers: this.getCustomers(),
       receivers: this.getReceivers(),
@@ -2746,23 +2946,121 @@ class StorageService {
       ledger: this.getLedgerEntries(),
       settings: this.getSettings(),
       users: this.getUsers(),
-      stations: this.getStations()
+      stations: this.getStations(),
+      savedBanks: this.getSavedBanks()
     };
     return JSON.stringify(data, null, 2);
   }
 
-  importAllData(jsonString: string): boolean {
+  async importAllData(jsonString: string): Promise<boolean> {
     try {
       const data = JSON.parse(jsonString);
-      if (data.customers) this.save(STORAGE_KEYS.CUSTOMERS, data.customers);
-      if (data.receivers) this.save(STORAGE_KEYS.RECEIVERS, data.receivers);
-      if (data.transfers) this.save(STORAGE_KEYS.TRANSFERS, data.transfers);
-      if (data.loans) this.save(STORAGE_KEYS.LOANS, data.loans);
-      if (data.amanat) this.save(STORAGE_KEYS.AMANAT, data.amanat);
-      if (data.ledger) this.save(STORAGE_KEYS.LEDGER, data.ledger);
-      if (data.settings) this.save(STORAGE_KEYS.SETTINGS, data.settings);
-      if (data.users) this.save(STORAGE_KEYS.USERS, data.users);
-      if (data.stations) this.save(STORAGE_KEYS.STATIONS, data.stations);
+      if (!data || typeof data !== 'object') return false;
+
+      const customers = Array.isArray(data.customers)
+        ? data.customers
+        : Array.isArray(data.pk_dubai_customers_v1)
+        ? data.pk_dubai_customers_v1
+        : this.getCustomers();
+
+      const receivers = Array.isArray(data.receivers)
+        ? data.receivers
+        : Array.isArray(data.pk_dubai_receivers_v1)
+        ? data.pk_dubai_receivers_v1
+        : this.getReceivers();
+
+      const transfers = Array.isArray(data.transfers)
+        ? data.transfers
+        : Array.isArray(data.pk_dubai_transfers_v1)
+        ? data.pk_dubai_transfers_v1
+        : this.getTransfers();
+
+      const loans = Array.isArray(data.loans)
+        ? data.loans
+        : Array.isArray(data.pk_dubai_loans_v1)
+        ? data.pk_dubai_loans_v1
+        : this.getLoans();
+
+      const amanat = Array.isArray(data.amanat)
+        ? data.amanat
+        : Array.isArray(data.amanatAccounts)
+        ? data.amanatAccounts
+        : Array.isArray(data.pk_dubai_amanat_v1)
+        ? data.pk_dubai_amanat_v1
+        : this.getAmanatAccounts();
+
+      const ledger = Array.isArray(data.ledger)
+        ? data.ledger
+        : Array.isArray(data.cashLedger)
+        ? data.cashLedger
+        : Array.isArray(data.pk_dubai_ledger_v1)
+        ? data.pk_dubai_ledger_v1
+        : this.getLedgerEntries();
+
+      const settings =
+        data.settings && typeof data.settings === 'object'
+          ? data.settings
+          : data.businessSettings && typeof data.businessSettings === 'object'
+          ? data.businessSettings
+          : data.pk_dubai_settings_v1 && typeof data.pk_dubai_settings_v1 === 'object'
+          ? data.pk_dubai_settings_v1
+          : this.getSettings();
+
+      const users = Array.isArray(data.users)
+        ? data.users
+        : Array.isArray(data.pk_dubai_users_v1)
+        ? data.pk_dubai_users_v1
+        : this.getUsers();
+
+      const stations = Array.isArray(data.stations)
+        ? data.stations
+        : Array.isArray(data.pk_dubai_stations_v1)
+        ? data.pk_dubai_stations_v1
+        : this.getStations();
+
+      const savedBanks = Array.isArray(data.savedBanks)
+        ? data.savedBanks
+        : Array.isArray(data.banks)
+        ? data.banks
+        : Array.isArray(data.pk_dubai_banks_v1)
+        ? data.pk_dubai_banks_v1
+        : this.getSavedBanks();
+
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+      localStorage.setItem(STORAGE_KEYS.RECEIVERS, JSON.stringify(receivers));
+      localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify(transfers));
+      localStorage.setItem(STORAGE_KEYS.LOANS, JSON.stringify(loans));
+      localStorage.setItem(STORAGE_KEYS.AMANAT, JSON.stringify(amanat));
+      localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(ledger));
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      localStorage.setItem(STORAGE_KEYS.STATIONS, JSON.stringify(stations));
+      localStorage.setItem(STORAGE_KEYS.SAVED_BANKS, JSON.stringify(savedBanks));
+      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+      const fullStore: Record<string, unknown> = {
+        [STORAGE_KEYS.CUSTOMERS]: customers,
+        [STORAGE_KEYS.RECEIVERS]: receivers,
+        [STORAGE_KEYS.TRANSFERS]: transfers,
+        [STORAGE_KEYS.LOANS]: loans,
+        [STORAGE_KEYS.AMANAT]: amanat,
+        [STORAGE_KEYS.LEDGER]: ledger,
+        [STORAGE_KEYS.SETTINGS]: settings,
+        [STORAGE_KEYS.USERS]: users,
+        [STORAGE_KEYS.STATIONS]: stations,
+        [STORAGE_KEYS.SAVED_BANKS]: savedBanks
+      };
+
+      try {
+        await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store: fullStore })
+        });
+      } catch {
+        // local storage updated
+      }
+
       return true;
     } catch (e) {
       console.error('Failed to import JSON data:', e);
@@ -2770,25 +3068,79 @@ class StorageService {
     }
   }
 
-  clearAllData(): void {
-    this.save(STORAGE_KEYS.CUSTOMERS, []);
-    this.save(STORAGE_KEYS.RECEIVERS, []);
-    this.save(STORAGE_KEYS.TRANSFERS, []);
-    this.save(STORAGE_KEYS.LOANS, []);
-    this.save(STORAGE_KEYS.AMANAT, []);
-    this.save(STORAGE_KEYS.LEDGER, []);
+  async clearAllData(): Promise<void> {
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.RECEIVERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.LOANS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.AMANAT, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+    // Reset station balances
+    const stations = this.getStations().map(st => ({
+      ...st,
+      currentBalancePKR: 0,
+      entries: []
+    }));
+    localStorage.setItem(STORAGE_KEYS.STATIONS, JSON.stringify(stations));
+
+    const fullStore: Record<string, unknown> = {
+      [STORAGE_KEYS.CUSTOMERS]: [],
+      [STORAGE_KEYS.RECEIVERS]: [],
+      [STORAGE_KEYS.TRANSFERS]: [],
+      [STORAGE_KEYS.LOANS]: [],
+      [STORAGE_KEYS.AMANAT]: [],
+      [STORAGE_KEYS.LEDGER]: [],
+      [STORAGE_KEYS.STATIONS]: stations
+    };
+
+    try {
+      await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store: fullStore })
+      });
+    } catch {
+      // offline fallback
+    }
   }
 
-  resetToDemo(): void {
-    this.save(STORAGE_KEYS.CUSTOMERS, demoCustomers);
-    this.save(STORAGE_KEYS.RECEIVERS, demoReceivers);
-    this.save(STORAGE_KEYS.TRANSFERS, demoTransfers);
-    this.save(STORAGE_KEYS.LOANS, demoLoans);
-    this.save(STORAGE_KEYS.AMANAT, demoAmanatAccounts);
-    this.save(STORAGE_KEYS.LEDGER, demoLedger);
-    this.save(STORAGE_KEYS.SETTINGS, defaultSettings);
-    this.save(STORAGE_KEYS.USERS, defaultUsers);
-    this.save(STORAGE_KEYS.STATIONS, defaultStations);
+  async resetToDemo(): Promise<void> {
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(demoCustomers));
+    localStorage.setItem(STORAGE_KEYS.RECEIVERS, JSON.stringify(demoReceivers));
+    localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify(demoTransfers));
+    localStorage.setItem(STORAGE_KEYS.LOANS, JSON.stringify(demoLoans));
+    localStorage.setItem(STORAGE_KEYS.AMANAT, JSON.stringify(demoAmanatAccounts));
+    localStorage.setItem(STORAGE_KEYS.LEDGER, JSON.stringify(demoLedger));
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(defaultSettings));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(defaultUsers));
+    localStorage.setItem(STORAGE_KEYS.STATIONS, JSON.stringify(defaultStations));
+    localStorage.setItem(STORAGE_KEYS.SAVED_BANKS, JSON.stringify(defaultSavedBanks));
+    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+
+    const fullStore: Record<string, unknown> = {
+      [STORAGE_KEYS.CUSTOMERS]: demoCustomers,
+      [STORAGE_KEYS.RECEIVERS]: demoReceivers,
+      [STORAGE_KEYS.TRANSFERS]: demoTransfers,
+      [STORAGE_KEYS.LOANS]: demoLoans,
+      [STORAGE_KEYS.AMANAT]: demoAmanatAccounts,
+      [STORAGE_KEYS.LEDGER]: demoLedger,
+      [STORAGE_KEYS.SETTINGS]: defaultSettings,
+      [STORAGE_KEYS.USERS]: defaultUsers,
+      [STORAGE_KEYS.STATIONS]: defaultStations,
+      [STORAGE_KEYS.SAVED_BANKS]: defaultSavedBanks
+    };
+
+    try {
+      await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store: fullStore })
+      });
+    } catch {
+      // offline fallback
+    }
   }
 
   exportMySQLDump(): string {

@@ -41,7 +41,8 @@ export const KhataView: React.FC<KhataViewProps> = ({
     language,
     formatMoney,
     isSuperAdmin,
-    canManageKhata
+    canManageKhata,
+    canDeleteRecords
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -91,12 +92,17 @@ export const KhataView: React.FC<KhataViewProps> = ({
   const handleSaveLoanDetails = () => {
     if (!editingLoan) return;
     const origAmt = Math.max(0, Number(editOriginalAmount) || 0);
+    const sumAdditional = (editingLoan.repayments || [])
+      .filter(r => r.entryType === 'additional_loan')
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const updatedInitialAmount = Math.max(0, origAmt - sumAdditional);
     const updated: Loan = {
       ...editingLoan,
       borrowerName: editBorrowerName.trim() || editingLoan.borrowerName,
       borrowerPhone: editBorrowerPhone.trim() || editingLoan.borrowerPhone,
       loanDate: editLoanDate || editingLoan.loanDate,
-      dueDate: editDueDate || editingLoan.dueDate,
+      dueDate: editDueDate.trim(),
+      initialAmount: updatedInitialAmount,
       originalAmount: origAmt,
       currency: editCurrency,
       purpose: editPurpose.trim()
@@ -282,10 +288,8 @@ export const KhataView: React.FC<KhataViewProps> = ({
             >
               <option value="all">{t('all')} {t('status')}</option>
               <option value="Outstanding">{t('statusOutstanding')}</option>
-              <option value="Partially Repaid">{t('statusPartiallyRepaid')}</option>
               <option value="Fully Repaid">{t('statusFullyRepaid')}</option>
               <option value="Overdue">{t('statusOverdue')}</option>
-              <option value="Adjusted">{t('statusAdjusted')}</option>
             </select>
 
             <select
@@ -403,7 +407,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
                       <span className={`font-mono font-bold ${
                         loan.status === 'Overdue' ? 'text-red-700 font-black' : 'text-slate-800'
                       }`}>
-                        {loan.dueDate}
+                        {loan.dueDate || '—'}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-mono font-extrabold text-slate-950">
@@ -448,15 +452,13 @@ export const KhataView: React.FC<KhataViewProps> = ({
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
-                        {loan.remainingBalance > 0 && (
-                          <button
-                            onClick={() => onRecordRepayment(loan)}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
-                            title={t('recordRepayment')}
-                          >
-                            {language === 'ur' ? 'واپسی' : 'Repay'}
-                          </button>
-                        )}
+                        <button
+                          onClick={() => onRecordRepayment(loan)}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+                          title={t('recordRepayment')}
+                        >
+                          {language === 'ur' ? 'واپسی / مزید قرض' : 'Return / Take'}
+                        </button>
                         {isSuperAdmin && (
                           <button
                             onClick={() => handleDelete(loan.id)}
@@ -563,9 +565,20 @@ export const KhataView: React.FC<KhataViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    {language === 'ur' ? 'واپسی کی مقررہ تاریخ' : 'Due Date'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">
+                      {language === 'ur' ? 'واپسی کی تاریخ (اختیاری)' : 'Return Date (Optional)'}
+                    </label>
+                    {editDueDate && (
+                      <button
+                        type="button"
+                        onClick={() => setEditDueDate('')}
+                        className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        {language === 'ur' ? 'ختم کریں' : 'Clear'}
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="date"
                     value={editDueDate}
@@ -668,6 +681,21 @@ export const KhataView: React.FC<KhataViewProps> = ({
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono font-bold text-slate-900">{rep.date}</span>
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                      rep.entryType === 'additional_loan'
+                                        ? 'bg-rose-100 text-rose-800'
+                                        : 'bg-emerald-100 text-emerald-800'
+                                    }`}
+                                  >
+                                    {rep.entryType === 'additional_loan'
+                                      ? language === 'ur'
+                                        ? '+ مزید قرض'
+                                        : '+ Additional Loan'
+                                      : language === 'ur'
+                                      ? '- واپسی رقم'
+                                      : '- Repayment'}
+                                  </span>
                                   <span className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold">
                                     {rep.paymentMethod}
                                   </span>
@@ -677,9 +705,29 @@ export const KhataView: React.FC<KhataViewProps> = ({
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="font-mono font-extrabold text-emerald-700">
+                                <span
+                                  className={`font-mono font-extrabold ${
+                                    rep.entryType === 'additional_loan'
+                                      ? 'text-rose-700'
+                                      : 'text-emerald-700'
+                                  }`}
+                                >
+                                  {rep.entryType === 'additional_loan' ? '+' : '-'}
                                   {formatMoney(rep.amount, editingLoan.currency)}
                                 </span>
+                                <button
+                                  onClick={() =>
+                                    openReceipt({
+                                      format: 'F',
+                                      loan: editingLoan,
+                                      repayment: rep
+                                    })
+                                  }
+                                  className="p-1 text-slate-700 hover:bg-slate-100 rounded transition cursor-pointer"
+                                  title={language === 'ur' ? 'رسید پرنٹ کریں' : 'Print Receipt'}
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
                                 <button
                                   onClick={() => startEditRepayment(rep)}
                                   className="p-1 text-amber-700 hover:bg-amber-50 rounded transition cursor-pointer"
@@ -687,7 +735,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
-                                {isSuperAdmin && (
+                                {(isSuperAdmin || canDeleteRecords) && (
                                   <button
                                     onClick={() => {
                                       if (confirmDeleteRepaymentId === rep.id) {
@@ -723,7 +771,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
 
             <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between gap-3">
               <div>
-                {isSuperAdmin && (
+                {(isSuperAdmin || canDeleteRecords) && (
                   <button
                     onClick={() => {
                       deleteLoan(editingLoan.id);

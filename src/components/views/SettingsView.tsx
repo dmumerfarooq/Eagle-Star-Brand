@@ -9,7 +9,7 @@ import { storage } from '../../services/storage';
 import { UserModal } from '../modals/UserModal';
 import { StationModal } from '../modals/StationModal';
 import { EagleStarLogo } from '../common/EagleStarLogo';
-import { AppUser, UserRole, Station } from '../../types';
+import { AppUser, UserRole, Station, CurrencyConfig } from '../../types';
 import {
   Settings,
   Save,
@@ -63,7 +63,8 @@ export const SettingsView: React.FC = () => {
     deleteStation,
     updateStationStatus,
     transfers,
-    formatMoney
+    formatMoney,
+    refreshData
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'business' | 'receipts' | 'stations' | 'users' | 'backup'>('business');
@@ -114,6 +115,175 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setIsSavingRate(false), 400);
   };
 
+  // Currency Management State (Change Currency & Edit/Update Currencies)
+  const defaultCurrenciesFallback: CurrencyConfig[] = [
+    { code: 'AED', nameEn: 'UAE Dirham', nameUr: 'اماراتی درہم', symbol: 'AED', rateToPKR: settings.defaultExchangeRate || 77.50 },
+    { code: 'PKR', nameEn: 'Pakistani Rupee', nameUr: 'پاکستانی روپیہ', symbol: 'PKR', rateToPKR: 1 },
+    { code: 'SAR', nameEn: 'Saudi Riyal', nameUr: 'سعودی ریال', symbol: 'SAR', rateToPKR: 74.20 },
+    { code: 'USD', nameEn: 'US Dollar', nameUr: 'امریکی ڈالر', symbol: 'USD', rateToPKR: 278.50 },
+    { code: 'OMR', nameEn: 'Omani Rial', nameUr: 'عمانی ریال', symbol: 'OMR', rateToPKR: 723.00 },
+    { code: 'GBP', nameEn: 'British Pound', nameUr: 'برطانوی پاؤنڈ', symbol: 'GBP', rateToPKR: 352.00 },
+  ];
+
+  const activeCurrencies: CurrencyConfig[] =
+    formData.currencies && formData.currencies.length > 0
+      ? formData.currencies
+      : defaultCurrenciesFallback;
+
+  const [editingCurrencyCode, setEditingCurrencyCode] = useState<string | null>(null);
+  const [isAddingCurrency, setIsAddingCurrency] = useState(false);
+  const [currCode, setCurrCode] = useState('');
+  const [currNameEn, setCurrNameEn] = useState('');
+  const [currNameUr, setCurrNameUr] = useState('');
+  const [currRate, setCurrRate] = useState('');
+
+  const handleSetDefaultCurrency = (code: string) => {
+    const updatedSettings = {
+      ...formData,
+      defaultTransferCurrency: code,
+      currencies: activeCurrencies
+    };
+    setFormData(updatedSettings);
+    updateSettings(updatedSettings);
+    showToast(
+      language === 'ur'
+        ? `بنیادی کرنسی (${code}) کامیابی سے منتخب ہو گئی!`
+        : `Default transfer currency changed to ${code}!`,
+      'success'
+    );
+  };
+
+  const handleStartEditCurrency = (curr: CurrencyConfig) => {
+    setIsAddingCurrency(false);
+    setEditingCurrencyCode(curr.code);
+    setCurrCode(curr.code);
+    setCurrNameEn(curr.nameEn);
+    setCurrNameUr(curr.nameUr);
+    setCurrRate(curr.rateToPKR.toString());
+  };
+
+  const handleStartAddCurrency = () => {
+    setEditingCurrencyCode(null);
+    setIsAddingCurrency(true);
+    setCurrCode('');
+    setCurrNameEn('');
+    setCurrNameUr('');
+    setCurrRate('77.50');
+  };
+
+  const handleSaveCurrencyItem = () => {
+    const cleanCode = currCode.trim().toUpperCase();
+    const rateNum = parseFloat(currRate);
+    if (!cleanCode || !currNameEn.trim()) {
+      showToast(
+        language === 'ur'
+          ? 'براہ کرم کرنسی کوڈ اور نام درج کریں'
+          : 'Please enter Currency Code and Name',
+        'error'
+      );
+      return;
+    }
+    if (isNaN(rateNum) || rateNum <= 0) {
+      showToast(
+        language === 'ur'
+          ? 'براہ کرم درست ایکسچینج ریٹ درج کریں'
+          : 'Please enter a valid exchange rate',
+        'error'
+      );
+      return;
+    }
+
+    if (cleanCode === 'AED' && !isSuperAdmin && rateNum !== settings.defaultExchangeRate) {
+      showToast(
+        language === 'ur'
+          ? 'درہم (AED) کا ریٹ صرف سپر ایڈمن ہی تبدیل کر سکتے ہیں!'
+          : 'Only Super Admin can change the AED exchange rate!',
+        'error'
+      );
+      return;
+    }
+
+    const updatedItem: CurrencyConfig = {
+      code: cleanCode,
+      nameEn: currNameEn.trim(),
+      nameUr: currNameUr.trim() || currNameEn.trim(),
+      symbol: cleanCode,
+      rateToPKR: cleanCode === 'PKR' ? 1 : Number(rateNum.toFixed(2)),
+    };
+
+    let updatedList: CurrencyConfig[];
+    if (editingCurrencyCode) {
+      updatedList = activeCurrencies.map(c =>
+        c.code === editingCurrencyCode ? updatedItem : c
+      );
+    } else {
+      const exists = activeCurrencies.some(c => c.code === cleanCode);
+      if (exists) {
+        updatedList = activeCurrencies.map(c =>
+          c.code === cleanCode ? updatedItem : c
+        );
+      } else {
+        updatedList = [...activeCurrencies, updatedItem];
+      }
+    }
+
+    const nextDefaultExchangeRate =
+      cleanCode === 'AED' && isSuperAdmin
+        ? updatedItem.rateToPKR
+        : formData.defaultExchangeRate;
+
+    if (cleanCode === 'AED' && isSuperAdmin) {
+      setManualRateInput(updatedItem.rateToPKR.toFixed(2));
+    }
+
+    const updatedSettings = {
+      ...formData,
+      defaultExchangeRate: nextDefaultExchangeRate,
+      currencies: updatedList,
+    };
+
+    setFormData(updatedSettings);
+    updateSettings(updatedSettings);
+    setEditingCurrencyCode(null);
+    setIsAddingCurrency(false);
+
+    showToast(
+      language === 'ur'
+        ? `کرنسی (${cleanCode}) کامیابی سے اپڈیٹ اور محفوظ ہو گئی!`
+        : `Currency (${cleanCode}) updated and saved!`,
+      'success'
+    );
+  };
+
+  const handleDeleteCurrencyItem = (code: string) => {
+    if (code === 'AED' || code === 'PKR') {
+      showToast(
+        language === 'ur'
+          ? 'بنیادی کرنسی (AED / PKR) حذف نہیں کی جا سکتی'
+          : 'Core currencies (AED / PKR) cannot be deleted',
+        'error'
+      );
+      return;
+    }
+    const updatedList = activeCurrencies.filter(c => c.code !== code);
+    const updatedDefault =
+      formData.defaultTransferCurrency === code ? 'AED' : formData.defaultTransferCurrency;
+
+    const updatedSettings = {
+      ...formData,
+      defaultTransferCurrency: updatedDefault,
+      currencies: updatedList,
+    };
+    setFormData(updatedSettings);
+    updateSettings(updatedSettings);
+    showToast(
+      language === 'ur'
+        ? `کرنسی (${code}) فہرست سے ہٹا دی گئی`
+        : `Currency (${code}) removed`,
+      'info'
+    );
+  };
+
   // User Modal State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedUserToEdit, setSelectedUserToEdit] = useState<AppUser | null>(null);
@@ -161,13 +331,14 @@ export const SettingsView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       if (typeof reader.result === 'string') {
-        setImportJson(reader.result);
-        const success = storage.importAllData(reader.result);
+        const text = reader.result;
+        setImportJson(text);
+        const success = await storage.importAllData(text);
         if (success) {
+          refreshData();
           showToast(t('dataImported'), 'success');
-          setTimeout(() => window.location.reload(), 400);
         } else {
           showToast(
             language === 'ur'
@@ -241,14 +412,25 @@ export const SettingsView: React.FC = () => {
     );
   };
 
-  const handleImportBackup = () => {
+  const handleImportBackup = async () => {
     if (!importJson.trim()) return;
-    const success = storage.importAllData(importJson);
+    const success = await storage.importAllData(importJson);
     if (success) {
-      showToast(t('dataImported'), 'success');
-      window.location.reload();
+      refreshData();
+      showToast(
+        language === 'ur'
+          ? 'بیک اپ ڈیٹا کامیابی سے بحال اور محفوظ ہو گیا!'
+          : 'Backup data imported and synchronized successfully!',
+        'success'
+      );
+      setImportJson('');
     } else {
-      showToast('Error: Invalid JSON backup file!', 'error');
+      showToast(
+        language === 'ur'
+          ? 'خرابی: بیک اپ JSON فائل درست نہیں ہے!'
+          : 'Error: Invalid JSON backup file!',
+        'error'
+      );
     }
   };
 
@@ -652,6 +834,246 @@ export const SettingsView: React.FC = () => {
             )}
           </div>
 
+          {/* Change & Edit Currencies (PKR, AED, SAR, USD, OMR, GBP & Custom Currencies) */}
+          <div className="bg-white p-6 rounded-2xl border-2 border-indigo-200 shadow-sm space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                  <Coins className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-base sm:text-lg text-slate-900 font-urdu-heading">
+                    {language === 'ur'
+                      ? 'کرنسی تبدیل کریں اور کرنسی ریٹ میں ترمیم کریں (Change & Edit Currencies)'
+                      : 'Change Default Currency & Edit / Update Currencies'}
+                  </h2>
+                  <p className="text-xs text-slate-600 font-urdu-body">
+                    {language === 'ur'
+                      ? 'منی ٹرانسفر کے لیے اپنی پسندیدہ کرنسی (PKR روپیہ، AED درہم، ریال، ڈالر وغیرہ) منتخب کریں یا کسی بھی کرنسی میں ترمیم کریں'
+                      : 'Select default currency for Money Transfers (PKR, AED, SAR, USD, etc.) or edit/add currencies and rates'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartAddCurrency}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{language === 'ur' ? '+ نئی کرنسی شامل کریں' : '+ Add New Currency'}</span>
+              </button>
+            </div>
+
+            {/* Default Transfer Currency Selector Bar */}
+            <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-950 block font-urdu-heading">
+                  {language === 'ur'
+                    ? 'منی ٹرانسفر کی ڈیفالٹ کرنسی تبدیل کریں (Default Transfer Currency):'
+                    : 'Change Default Money Transfer Currency:'}
+                </span>
+                <span className="text-[11px] text-indigo-800 font-urdu-body">
+                  {language === 'ur'
+                    ? 'منتخب کردہ کرنسی نیا ٹرانسفر کھولتے وقت خودکار طور پر سلیکٹ ہو گی (آپ ٹرانسفر فارم میں بھی تبدیل کر سکتے ہیں)'
+                    : 'This currency will be pre-selected when opening New Money Transfer (can also be switched inside the transfer form)'}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={formData.defaultTransferCurrency || 'AED'}
+                  onChange={e => handleSetDefaultCurrency(e.target.value)}
+                  className="bg-white border-2 border-indigo-500 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-extrabold text-indigo-950 shadow-2xs outline-hidden cursor-pointer"
+                >
+                  {activeCurrencies.map(curr => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} — {curr.nameEn} ({curr.nameUr})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Add / Edit Currency Inline Form */}
+            {(isAddingCurrency || editingCurrencyCode) && (
+              <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-4 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                  <h4 className="text-xs sm:text-sm font-extrabold text-amber-950 flex items-center gap-1.5 font-urdu-heading">
+                    <Edit2 className="w-4 h-4 text-amber-700" />
+                    <span>
+                      {editingCurrencyCode
+                        ? (language === 'ur'
+                            ? `کرنسی میں ترمیم کریں: ${editingCurrencyCode}`
+                            : `Edit Currency: ${editingCurrencyCode}`)
+                        : (language === 'ur'
+                            ? 'نئی کرنسی شامل کریں (Add New Currency)'
+                            : 'Add New Currency')}
+                    </span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCurrencyCode(null);
+                      setIsAddingCurrency(false);
+                    }}
+                    className="text-xs text-slate-600 hover:text-slate-900 font-bold cursor-pointer"
+                  >
+                    ✕ {language === 'ur' ? 'بند کریں' : 'Close'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      {language === 'ur' ? 'کرنسی کوڈ (Code) *' : 'Currency Code *'}
+                    </label>
+                    <input
+                      type="text"
+                      value={currCode}
+                      disabled={editingCurrencyCode === 'AED' || editingCurrencyCode === 'PKR'}
+                      onChange={e => setCurrCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. AED, PKR, SAR"
+                      className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono font-bold text-slate-900 uppercase disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      {language === 'ur' ? 'انگریزی نام (English Name) *' : 'Currency Name (English) *'}
+                    </label>
+                    <input
+                      type="text"
+                      value={currNameEn}
+                      onChange={e => setCurrNameEn(e.target.value)}
+                      placeholder="e.g. UAE Dirham"
+                      className="w-full bg-white border border-slate-300 rounded-lg p-2 font-semibold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1 font-urdu-heading">
+                      {language === 'ur' ? 'اردو نام (Urdu Name)' : 'Currency Name (Urdu)'}
+                    </label>
+                    <input
+                      type="text"
+                      value={currNameUr}
+                      onChange={e => setCurrNameUr(e.target.value)}
+                      placeholder="مثلاً اماراتی درہم"
+                      dir="rtl"
+                      className="w-full bg-white border border-slate-300 rounded-lg p-2 font-urdu-body font-bold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      {language === 'ur' ? 'پاکستانی روپے ریٹ (Rate in PKR) *' : 'Exchange Rate (to PKR) *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      disabled={currCode.toUpperCase() === 'PKR' || (currCode.toUpperCase() === 'AED' && !isSuperAdmin)}
+                      value={currCode.toUpperCase() === 'PKR' ? '1' : currRate}
+                      onChange={e => setCurrRate(e.target.value)}
+                      placeholder="77.50"
+                      className="w-full bg-white border border-slate-300 rounded-lg p-2 font-mono font-bold text-emerald-900 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCurrencyCode(null);
+                      setIsAddingCurrency(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                  >
+                    {language === 'ur' ? 'منسوخ کریں' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCurrencyItem}
+                    className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{language === 'ur' ? 'کرنسی محفوظ کریں' : 'Save Currency'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Currencies Table / Cards */}
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                    <th className="py-2.5 px-3">{language === 'ur' ? 'کرنسی کوڈ' : 'Code'}</th>
+                    <th className="py-2.5 px-3">{language === 'ur' ? 'نام (انگریزی / اردو)' : 'Currency Name'}</th>
+                    <th className="py-2.5 px-3">{language === 'ur' ? 'پاکستانی روپے ریٹ (PKR Rate)' : 'Rate to PKR'}</th>
+                    <th className="py-2.5 px-3">{language === 'ur' ? 'حیثیت (Status)' : 'Default Status'}</th>
+                    <th className="py-2.5 px-3 text-right">{language === 'ur' ? 'ترمیم / عمل' : 'Edit / Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {activeCurrencies.map(curr => {
+                    const isDefault = (formData.defaultTransferCurrency || 'AED') === curr.code;
+                    return (
+                      <tr key={curr.code} className={isDefault ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}>
+                        <td className="py-2.5 px-3 font-mono font-black text-slate-900 text-sm">
+                          {curr.code}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-900">{curr.nameEn}</div>
+                          <div className="text-[11px] text-slate-600 font-urdu-body">{curr.nameUr}</div>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
+                          {curr.code === 'PKR' ? '1.00 PKR (Base)' : `1 ${curr.code} = ${Number(curr.rateToPKR).toFixed(2)} PKR`}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {isDefault ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              <CheckCircle className="w-3 h-3 text-emerald-700" />
+                              <span>{language === 'ur' ? 'ڈیفالٹ کرنسی' : 'Default Currency'}</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetDefaultCurrency(curr.code)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-700 border border-slate-300 transition cursor-pointer"
+                            >
+                              {language === 'ur' ? 'ڈیفالٹ بنائیں' : 'Set as Default'}
+                            </button>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditCurrency(curr)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] inline-flex items-center gap-1 border border-amber-300 cursor-pointer"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>{language === 'ur' ? 'ترمیم (Edit)' : 'Edit'}</span>
+                            </button>
+                            {curr.code !== 'AED' && curr.code !== 'PKR' && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCurrencyItem(curr.code)}
+                                className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 cursor-pointer"
+                                title="Delete Currency"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Business Profile */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center gap-2 border-b pb-3 text-slate-900">
@@ -800,8 +1222,9 @@ export const SettingsView: React.FC = () => {
                   type="number"
                   step="0.01"
                   disabled={!isSuperAdmin}
-                  value={formData.defaultExchangeRate}
-                  onChange={e => handleChange('defaultExchangeRate', Number(e.target.value))}
+                  value={formData.defaultExchangeRate === 0 ? '' : formData.defaultExchangeRate}
+                  onChange={e => handleChange('defaultExchangeRate', e.target.value === '' ? ('' as any) : Number(e.target.value))}
+                  placeholder="77.50"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-mono font-bold text-slate-950 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
@@ -818,8 +1241,9 @@ export const SettingsView: React.FC = () => {
                 <input
                   type="number"
                   step="0.1"
-                  value={formData.defaultCommissionPct}
-                  onChange={e => handleChange('defaultCommissionPct', Number(e.target.value))}
+                  value={formData.defaultCommissionPct === 0 ? '' : formData.defaultCommissionPct}
+                  onChange={e => handleChange('defaultCommissionPct', e.target.value === '' ? ('' as any) : Number(e.target.value))}
+                  placeholder="e.g. 2"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-mono text-slate-950"
                 />
               </div>
@@ -875,6 +1299,23 @@ export const SettingsView: React.FC = () => {
                 >
                   <option value="en">English (انگریزی)</option>
                   <option value="ur">اردو (Urdu)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  {language === 'ur' ? 'ٹرانسفر کی بنیادی کرنسی (Default Currency)' : 'Default Transfer Currency'}
+                </label>
+                <select
+                  value={formData.defaultTransferCurrency || 'AED'}
+                  onChange={e => handleChange('defaultTransferCurrency', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-slate-950"
+                >
+                  {activeCurrencies.map(curr => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} — {curr.nameEn} ({curr.nameUr})
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1994,7 +2435,7 @@ export const SettingsView: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   if (userToDelete) {
                     const res = deleteUser(userToDelete.id);
                     if (!res.success && res.error) {
@@ -2002,10 +2443,10 @@ export const SettingsView: React.FC = () => {
                     }
                     setUserToDelete(null);
                   } else if (confirmAction === 'reset_demo') {
-                    resetDemoData();
+                    await resetDemoData();
                     setConfirmAction(null);
                   } else if (confirmAction === 'clear_all') {
-                    clearAllData();
+                    await clearAllData();
                     setConfirmAction(null);
                   }
                 }}

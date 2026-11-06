@@ -6,12 +6,14 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Station, StationCategory } from '../../types';
-import { X, Building2, MapPin, Phone, User, Tag, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { X, Building2, MapPin, Phone, User, Tag, CheckCircle2, ShieldAlert, ArrowLeft } from 'lucide-react';
 
 interface StationModalProps {
   isOpen: boolean;
   onClose: () => void;
   stationToEdit?: Station | null;
+  onStationCreated?: (station: Station) => void;
+  returnToLabel?: string;
 }
 
 const COMMON_URDU_SUGGESTIONS = [
@@ -32,7 +34,9 @@ const COMMON_URDU_SUGGESTIONS = [
 export const StationModal: React.FC<StationModalProps> = ({
   isOpen,
   onClose,
-  stationToEdit
+  stationToEdit,
+  onStationCreated,
+  returnToLabel
 }) => {
   const { saveStation, stations, language, settings } = useApp();
 
@@ -46,7 +50,8 @@ export const StationModal: React.FC<StationModalProps> = ({
   const [address, setAddress] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
   const [notes, setNotes] = useState('');
-  const [balanceInputPKR, setBalanceInputPKR] = useState('0');
+  const [balanceInputPKR, setBalanceInputPKR] = useState('');
+  const [balanceInputAED, setBalanceInputAED] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const defaultRate = settings.defaultExchangeRate || 77.5;
@@ -63,7 +68,9 @@ export const StationModal: React.FC<StationModalProps> = ({
       setAddress(stationToEdit.address || '');
       setStatus(stationToEdit.status || 'active');
       setNotes(stationToEdit.notes || '');
-      setBalanceInputPKR(String(stationToEdit.currentBalancePKR ?? 0));
+      const existingBal = stationToEdit.currentBalancePKR ?? 0;
+      setBalanceInputPKR(existingBal !== 0 ? String(existingBal) : '');
+      setBalanceInputAED(existingBal !== 0 ? String(Math.round(existingBal / defaultRate)) : '');
     } else {
       const generatedCode = `ST-${String(stations.length + 1).padStart(2, '0')}`;
       setCode(generatedCode);
@@ -76,10 +83,11 @@ export const StationModal: React.FC<StationModalProps> = ({
       setAddress('');
       setStatus('active');
       setNotes('');
-      setBalanceInputPKR('0');
+      setBalanceInputPKR('');
+      setBalanceInputAED('');
     }
     setErrorMsg('');
-  }, [stationToEdit, isOpen, stations.length]);
+  }, [stationToEdit, isOpen, stations.length, defaultRate]);
 
   if (!isOpen) return null;
 
@@ -122,8 +130,8 @@ export const StationModal: React.FC<StationModalProps> = ({
       }
     }
 
-    const parsedBal = parseFloat(balanceInputPKR);
-    const targetBalancePKR = isNaN(parsedBal) ? (stationToEdit?.currentBalancePKR || 0) : Math.round(parsedBal);
+    const parsedBal = balanceInputPKR.trim() === '' ? 0 : parseFloat(balanceInputPKR);
+    const targetBalancePKR = isNaN(parsedBal) ? 0 : Math.round(parsedBal);
     const oldBalancePKR = stationToEdit?.currentBalancePKR || 0;
     let updatedEntries = [...(stationToEdit?.entries || [])];
 
@@ -175,32 +183,45 @@ export const StationModal: React.FC<StationModalProps> = ({
     };
 
     saveStation(savedStation);
+    if (onStationCreated) {
+      onStationCreated(savedStation);
+    }
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
       <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-6">
-        {/* Modal Header */}
-        <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-white border border-slate-700">
-              <Building2 className="w-5 h-5 text-emerald-400" />
+        {/* Modal Header with Prominent Back Option */}
+        <div className="bg-slate-900 px-5 sm:px-6 py-4 flex items-center justify-between text-white border-b border-slate-800">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer border border-slate-700 shrink-0"
+              title={returnToLabel || (language === 'ur' ? 'واپس جائیں' : 'Back')}
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>{returnToLabel || (language === 'ur' ? 'واپس جائیں' : 'Back')}</span>
+            </button>
+            <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-white border border-slate-700 shrink-0">
+              <Building2 className="w-4 h-4 text-emerald-400" />
             </div>
             <div>
-              <h3 className="text-base font-bold font-montserrat tracking-tight text-white flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-bold font-montserrat tracking-tight text-white flex items-center gap-2">
                 <span>{stationToEdit ? (language === 'ur' ? 'اسٹیشن میں ترمیم کریں' : 'Edit Station') : (language === 'ur' ? 'نیا اسٹیشن شامل کریں' : 'Add New Station')}</span>
               </h3>
-              <p className="text-xs text-slate-300 font-urdu">
+              <p className="text-[11px] sm:text-xs text-slate-300 font-urdu">
                 {language === 'ur'
-                  ? 'ترسیلات زر، مصفح آرڈر لسٹ اور کیش کاؤنٹر کیلئے اسٹیشن کا اندراج'
-                  : 'Configure delivery counter, branch, or wallet payout destination'}
+                  ? 'نیا وصولی اسٹیشن یا کاؤنٹر درج کریں'
+                  : 'Add delivery station or payout counter'}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -432,8 +453,17 @@ export const StationModal: React.FC<StationModalProps> = ({
               <input
                 type="number"
                 value={balanceInputPKR}
-                onChange={e => setBalanceInputPKR(e.target.value)}
-                placeholder="0"
+                onChange={e => {
+                  const val = e.target.value;
+                  setBalanceInputPKR(val);
+                  if (val === '' || val === '-') {
+                    setBalanceInputAED('');
+                  } else {
+                    const numPkr = parseFloat(val);
+                    setBalanceInputAED(!isNaN(numPkr) && numPkr !== 0 ? String(Math.round(numPkr / defaultRate)) : '');
+                  }
+                }}
+                placeholder={language === 'ur' ? 'رقم درج کریں (اختیاری)' : 'Enter balance (optional)'}
                 className="w-full px-3.5 py-2 bg-white border border-emerald-300 rounded-xl text-slate-950 text-sm font-mono font-black focus:ring-2 focus:ring-emerald-600 outline-none"
               />
             </div>
@@ -445,29 +475,36 @@ export const StationModal: React.FC<StationModalProps> = ({
               </label>
               <input
                 type="number"
-                value={Math.round((parseFloat(balanceInputPKR) || 0) / defaultRate)}
+                value={balanceInputAED}
                 onChange={e => {
-                  const aedVal = parseFloat(e.target.value) || 0;
-                  setBalanceInputPKR(String(Math.round(aedVal * defaultRate)));
+                  const val = e.target.value;
+                  setBalanceInputAED(val);
+                  if (val === '' || val === '-') {
+                    setBalanceInputPKR('');
+                  } else {
+                    const numAed = parseFloat(val);
+                    setBalanceInputPKR(!isNaN(numAed) && numAed !== 0 ? String(Math.round(numAed * defaultRate)) : '');
+                  }
                 }}
-                placeholder="0"
+                placeholder={language === 'ur' ? 'درہم درج کریں (اختیاری)' : 'Enter AED (optional)'}
                 className="w-full px-3.5 py-2 bg-white border border-emerald-300 rounded-xl text-blue-900 text-sm font-mono font-black focus:ring-2 focus:ring-blue-600 outline-none"
               />
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-100 transition flex items-center gap-1.5 cursor-pointer border border-slate-300"
             >
-              {language === 'ur' ? 'منسوخ کریں' : 'Cancel'}
+              <ArrowLeft className="w-4 h-4" />
+              <span>{returnToLabel || (language === 'ur' ? 'واپس جائیں (منسوخ)' : 'Back / Cancel')}</span>
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-950 hover:bg-slate-900 text-white shadow-md transition flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-950 hover:bg-slate-900 text-white shadow-md transition flex items-center gap-2 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               <span>

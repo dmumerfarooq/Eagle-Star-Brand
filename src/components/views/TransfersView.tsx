@@ -43,7 +43,8 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
     language,
     formatMoney,
     isSuperAdmin,
-    canEditTransfers
+    canEditTransfers,
+    canDeleteTransfers
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,7 +100,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = (id: string) => {
-    if (!isSuperAdmin) return;
+    if (!isSuperAdmin && !canDeleteTransfers) return;
     if (confirmDeleteId === id) {
       deleteTransfer(id);
       setConfirmDeleteId(null);
@@ -230,8 +231,6 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
               className="bg-slate-50 border border-slate-300 text-slate-900 font-bold rounded-xl px-3 py-2 text-xs focus:bg-white"
             >
               <option value="all">{t('all')} {t('status')}</option>
-              <option value="Received">{t('statusReceived')}</option>
-              <option value="Partially Paid">{t('statusPartiallyPaid')}</option>
               <option value="Completed">{t('statusCompleted')}</option>
             </select>
 
@@ -285,7 +284,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
         )}
 
         {/* Filtered Summary Totals Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-xs">
           <div className="bg-amber-50/70 border border-amber-200 rounded-xl px-3 py-2 flex items-center justify-between">
             <span className="font-bold text-amber-950">{language === 'ur' ? 'کل درہم (AED):' : 'Total AED:'}</span>
             <strong className="font-mono text-amber-900 font-black" dir="ltr">
@@ -293,21 +292,15 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
             </strong>
           </div>
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl px-3 py-2 flex items-center justify-between">
-            <span className="font-bold text-emerald-950">{language === 'ur' ? 'کل واجب الادا (PKR):' : 'Payable PKR:'}</span>
+            <span className="font-bold text-emerald-950">{language === 'ur' ? 'کل پاکستانی رقم (PKR):' : 'Total Sent PKR:'}</span>
             <strong className="font-mono text-emerald-900 font-black" dir="ltr">
               {formatMoney(filteredTotalPKR, 'PKR')}
             </strong>
           </div>
           <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between">
-            <span className="font-bold text-slate-800">{language === 'ur' ? 'ادا شدہ (PKR):' : 'Paid PKR:'}</span>
+            <span className="font-bold text-slate-800">{language === 'ur' ? 'کل ٹرانسفر آرڈرز:' : 'Total Orders:'}</span>
             <strong className="font-mono text-slate-900 font-black" dir="ltr">
-              {formatMoney(filteredPaidPKR, 'PKR')}
-            </strong>
-          </div>
-          <div className="bg-rose-50/70 border border-rose-200 rounded-xl px-3 py-2 flex items-center justify-between">
-            <span className="font-bold text-rose-950">{language === 'ur' ? 'بقایا واجب الادا:' : 'Remaining PKR:'}</span>
-            <strong className="font-mono text-rose-900 font-black" dir="ltr">
-              {formatMoney(filteredRemainingPKR, 'PKR')}
+              {filteredTransfers.length}
             </strong>
           </div>
         </div>
@@ -328,8 +321,6 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
                 <th className="py-3 px-4 text-start">{t('amountAed')}</th>
                 <th className="py-3 px-4 text-start">{t('exchangeRate')}</th>
                 <th className="py-3 px-4 text-start">{t('payablePkr')}</th>
-                <th className="py-3 px-4 text-start">{t('paidPkr')}</th>
-                <th className="py-3 px-4 text-start">{t('remaining')}</th>
                 <th className="py-3 px-4 text-start">{t('status')}</th>
                 <th className="py-3 px-4 text-center">{t('actions')}</th>
               </tr>
@@ -337,7 +328,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredTransfers.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-slate-600 font-bold">
+                  <td colSpan={11} className="py-12 text-center text-slate-600 font-bold">
                     {t('noRecordsFound')}
                   </td>
                 </tr>
@@ -389,7 +380,14 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-mono font-extrabold text-slate-950">
-                      {formatMoney(tr.amountAED, 'AED')}
+                      <div className="flex items-center gap-1.5">
+                        <span>{formatMoney(tr.amountAED, 'AED')}</span>
+                        {tr.inputCurrency && tr.inputCurrency !== 'AED' && (
+                          <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-900 font-mono text-[10px] font-bold border border-indigo-200">
+                            {tr.inputCurrency}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
                       {Number(tr.exchangeRate || 77.50).toFixed(2)}
@@ -397,23 +395,9 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
                     <td className="py-3.5 px-4 font-mono font-extrabold text-emerald-800">
                       {formatMoney(tr.netPayablePKR, 'PKR')}
                     </td>
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                      {formatMoney(tr.amountPaidPKR, 'PKR')}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono font-extrabold text-rose-800">
-                      {formatMoney(tr.remainingBalancePKR, 'PKR')}
-                    </td>
                     <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-md text-xs font-bold font-urdu-heading ${
-                          tr.status === 'Completed' || tr.status === 'Paid'
-                            ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
-                            : tr.status === 'Partially Paid'
-                            ? 'bg-slate-200 text-slate-950 border border-slate-400'
-                            : 'bg-emerald-50 text-emerald-950 border border-emerald-200'
-                        }`}
-                      >
-                        {t(tr.status)}
+                      <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold font-urdu-heading bg-emerald-100 text-emerald-950 border border-emerald-300">
+                        {t('Completed')}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -428,22 +412,14 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
                         {canEditTransfers && (
                           <button
                             onClick={() => (onEditTransfer ? onEditTransfer(tr) : openEditTransferModal(tr))}
-                            className="p-1.5 text-slate-700 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition cursor-pointer"
-                            title={language === 'ur' ? 'آرڈر میں ترمیم کریں' : 'Edit Transfer'}
+                            className="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition cursor-pointer inline-flex items-center gap-1"
+                            title={language === 'ur' ? 'آرڈر، تاریخ یا رقم میں ترمیم کریں' : 'Edit Transfer, Date or Currency'}
                           >
-                            <Pencil className="w-4 h-4 text-amber-600" />
+                            <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                            <span>{language === 'ur' ? 'ترمیم' : 'Edit'}</span>
                           </button>
                         )}
-                        {tr.remainingBalancePKR > 0 && (
-                          <button
-                            onClick={() => onRecordPayout(tr)}
-                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
-                            title={t('recordPayout')}
-                          >
-                            {language === 'ur' ? 'ادائیگی' : 'Pay'}
-                          </button>
-                        )}
-                        {isSuperAdmin && (
+                        {(isSuperAdmin || canDeleteTransfers) && (
                           <button
                             onClick={() => handleDelete(tr.id)}
                             className={`p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
@@ -451,7 +427,7 @@ export const TransfersView: React.FC<TransfersViewProps> = ({
                                 ? 'bg-red-600 text-white px-2 text-[11px] font-bold'
                                 : 'text-slate-500 hover:text-red-700 hover:bg-red-50'
                             }`}
-                            title={language === 'ur' ? 'حذف کریں (صرف سپر ایڈمن)' : 'Delete (Super Admin Only)'}
+                            title={language === 'ur' ? 'حذف کریں' : 'Delete'}
                           >
                             <Trash2 className="w-4 h-4" />
                             {confirmDeleteId === tr.id && (

@@ -19,8 +19,10 @@ export const RecordPayoutModal: React.FC<RecordPayoutModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { recordPayout, openReceipt, stations, t, language, formatMoney } = useApp();
+  const { recordPayout, openReceipt, stations, settings, t, language, formatMoney } = useApp();
 
+  const [payoutDate, setPayoutDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payoutCurrency, setPayoutCurrency] = useState<'PKR' | 'AED'>('PKR');
   const [payoutAmount, setPayoutAmount] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
   const [referenceNo, setReferenceNo] = useState('');
@@ -29,8 +31,10 @@ export const RecordPayoutModal: React.FC<RecordPayoutModalProps> = ({
 
   if (!isOpen || !transfer) return null;
 
+  const rate = transfer.exchangeRate || settings.defaultExchangeRate || 77.50;
   const maxPayable = transfer.remainingBalancePKR;
-  const numPayout = typeof payoutAmount === 'number' ? payoutAmount : Number(payoutAmount) || 0;
+  const rawInput = typeof payoutAmount === 'number' ? payoutAmount : Number(payoutAmount) || 0;
+  const numPayout = payoutCurrency === 'AED' ? Math.round(rawInput * rate) : rawInput;
   const isOverpaying = numPayout > maxPayable;
 
   const handleSubmit = (printImmediately: boolean) => {
@@ -41,7 +45,7 @@ export const RecordPayoutModal: React.FC<RecordPayoutModalProps> = ({
     const payout: Payout = {
       id: `pay-${Date.now()}`,
       transferId: transfer.id,
-      date: new Date().toISOString().split('T')[0],
+      date: payoutDate || new Date().toISOString().split('T')[0],
       receiverName: transfer.receiverName,
       amountPKR: numPayout,
       paymentMethod,
@@ -105,15 +109,58 @@ export const RecordPayoutModal: React.FC<RecordPayoutModalProps> = ({
             </div>
           </div>
 
+          {/* Custom Date & Currency Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                {language === 'ur' ? 'ادائیگی کی تاریخ (Custom Date)' : 'Payout Date (Custom Date)'}
+              </label>
+              <input
+                type="date"
+                value={payoutDate}
+                onChange={e => setPayoutDate(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-mono font-bold"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                {language === 'ur' ? 'کرنسی منتخب کریں (Currency)' : 'Select Currency'}
+              </label>
+              <select
+                value={payoutCurrency}
+                onChange={e => setPayoutCurrency(e.target.value as 'PKR' | 'AED')}
+                className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold"
+              >
+                <option value="PKR">PKR (پاکستانی روپے)</option>
+                <option value="AED">AED (درہم)</option>
+              </select>
+            </div>
+          </div>
+
           {/* Form */}
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">
-              {t('payoutAmount')} *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-700">
+                {t('payoutAmount')} ({payoutCurrency}) *
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setPayoutAmount(
+                    payoutCurrency === 'PKR'
+                      ? maxPayable
+                      : Number((maxPayable / rate).toFixed(2))
+                  )
+                }
+                className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+              >
+                {language === 'ur' ? 'مکمل بقایا رقم درج کریں' : 'Fill Full Remaining'}
+              </button>
+            </div>
             <input
               type="number"
               min="1"
-              max={maxPayable}
+              step="any"
               value={payoutAmount}
               onChange={e => setPayoutAmount(e.target.value === '' ? '' : Number(e.target.value))}
               placeholder={language === 'ur' ? 'ادائیگی کی رقم' : 'Payout Amount'}
@@ -121,6 +168,11 @@ export const RecordPayoutModal: React.FC<RecordPayoutModalProps> = ({
                 isOverpaying ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'
               }`}
             />
+            {payoutCurrency === 'AED' && rawInput > 0 && (
+              <p className="text-xs font-mono font-bold text-emerald-700 mt-1">
+                = {formatMoney(numPayout, 'PKR')} (@ {rate.toFixed(2)})
+              </p>
+            )}
             {isOverpaying && (
               <div className="flex items-center gap-1 text-red-600 text-xs mt-1">
                 <AlertCircle className="w-3.5 h-3.5" />

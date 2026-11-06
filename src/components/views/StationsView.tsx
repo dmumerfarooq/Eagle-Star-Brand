@@ -44,6 +44,7 @@ export const StationsView: React.FC = () => {
     formatNum,
     setCurrentScreen,
     isSuperAdmin,
+    canDeleteRecords,
     openReceipt,
     setSelectedOrderListStation
   } = useApp();
@@ -518,11 +519,11 @@ export const StationsView: React.FC = () => {
                             <Edit2 className="w-4 h-4" />
                           </button>
 
-                          {/* Delete button (Super Admin only) */}
-                          {isSuperAdmin && (
+                          {/* Delete button (Admin / Super Admin) */}
+                          {canDeleteRecords && (
                             <button
                               onClick={() => setStationToDelete(st)}
-                              title={language === 'ur' ? 'اسٹیشن حذف کریں (صرف سپر ایڈمن)' : 'Delete station (Super Admin Only)'}
+                              title={language === 'ur' ? 'اسٹیشن حذف کریں' : 'Delete station'}
                               className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50 transition border border-red-200 cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />

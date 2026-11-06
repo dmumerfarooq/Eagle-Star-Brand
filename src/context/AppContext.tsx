@@ -40,13 +40,18 @@ export type NavScreen =
 
 export type ReceiptModalState = {
   isOpen: boolean;
-  format: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'DEP';
+  format: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'DEP' | 'I' | 'J';
   transfer?: MoneyTransfer;
   payout?: Payout;
   loan?: Loan;
   repayment?: LoanRepayment;
   amanatAccount?: AmanatAccount;
   amanatEntry?: AmanatEntry;
+  filteredAmanatEntries?: AmanatEntry[];
+  customer?: Customer;
+  customerTransfers?: MoneyTransfer[];
+  customerLoans?: Loan[];
+  customerAmanat?: AmanatAccount;
   depositEntry?: {
     receiptNo: string;
     date: string;
@@ -108,14 +113,14 @@ interface AppContextType {
   saveTransfer: (transfer: MoneyTransfer) => MoneyTransfer;
   deleteTransfer: (id: string) => void;
   recordPayout: (transferId: string, payout: Payout) => void;
-  saveLoan: (loan: Loan) => void;
+  saveLoan: (loan: Loan) => Loan;
   deleteLoan: (id: string) => void;
-  recordLoanRepayment: (loanId: string, repayment: LoanRepayment) => void;
+  recordLoanRepayment: (loanId: string, repayment: LoanRepayment) => Loan | null;
   updateLoanRepayment: (loanId: string, repaymentId: string, updatedData: Partial<LoanRepayment>) => void;
   deleteLoanRepayment: (loanId: string, repaymentId: string) => void;
-  saveAmanatAccount: (account: AmanatAccount) => void;
+  saveAmanatAccount: (account: AmanatAccount) => AmanatAccount;
   deleteAmanatAccount: (accountId: string) => void;
-  recordAmanatEntry: (accountId: string, entry: Omit<AmanatEntry, 'id' | 'previousBalance' | 'newBalance'>) => void;
+  recordAmanatEntry: (accountId: string, entry: Omit<AmanatEntry, 'id' | 'previousBalance' | 'newBalance'>) => AmanatAccount | null;
   updateAmanatEntry: (accountId: string, entryId: string, updatedData: Partial<AmanatEntry>) => void;
   deleteAmanatEntry: (accountId: string, entryId: string) => void;
   addLedgerEntry: (entry: LedgerEntry) => void;
@@ -399,13 +404,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const canManageUsers = isSuperAdmin || (currentUser?.permissions?.canManageUsers ?? false);
   const canAccessSettings = isSuperAdmin || (currentUser?.permissions?.canAccessSettings ?? false);
 
-  // Granular rights: Exchange rate and ALL delete actions are strictly restricted to Super Admin
+  // Granular rights: Exchange rate and delete actions
   const canEditExchangeRate = isSuperAdmin || (currentUser?.permissions?.canEditExchangeRate ?? false);
   const canAccessTransfers = isSuperAdmin || (currentUser?.permissions?.canAccessTransfers ?? true);
   const canEditTransfers = isSuperAdmin || (currentUser?.permissions?.canEditTransfers ?? (isAdmin || isManager || isCashier));
-  // CRITICAL: Delete option is strictly exclusive to Super Admin (no other user may delete data)
-  const canDeleteTransfers = isSuperAdmin;
-  const canDeleteRecords = isSuperAdmin;
+  const canDeleteTransfers = isSuperAdmin || isAdmin || (currentUser?.permissions?.canDeleteTransfers ?? false);
+  const canDeleteRecords = isSuperAdmin || isAdmin || (currentUser?.permissions?.canDeleteTransfers ?? false);
   const canAccessOrderList = isSuperAdmin || (currentUser?.permissions?.canAccessOrderList ?? true);
   const canManageStations = isSuperAdmin || (currentUser?.permissions?.canManageStations ?? (isAdmin || isManager));
   const canManageCustomers = isSuperAdmin || (currentUser?.permissions?.canManageCustomers ?? true);
@@ -453,11 +457,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const denyDeleteIfNotSuperAdmin = (): boolean => {
-    if (!isSuperAdmin) {
+    if (!isSuperAdmin && !isAdmin && !currentUser?.permissions?.canDeleteTransfers) {
       showToast(
         language === 'ur'
-          ? 'ڈیٹا حذف (Delete) کرنے کا اختیار صرف سپر ایڈمن (Super Admin) کے پاس ہے!'
-          : 'Only Super Admin has permission to delete records!',
+          ? 'ڈیٹا حذف (Delete) کرنے کا اختیار صرف ایڈمنسٹریٹر کے پاس ہے!'
+          : 'Only Administrator has permission to delete records!',
         'error'
       );
       return true;
@@ -524,11 +528,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const saveLoan = (loan: Loan) => {
-    storage.saveLoan(loan);
+  const saveLoan = (loan: Loan): Loan => {
+    const saved = storage.saveLoan(loan);
     setLoans(storage.getLoans());
     setLedger(storage.getLedgerEntries());
     showToast(t('loanSaved'), 'success');
+    return saved;
   };
 
   const deleteLoan = (id: string) => {
@@ -539,13 +544,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast(language === 'ur' ? 'قرضہ ریکارڈ حذف کر دیا گیا' : 'Deleted successfully', 'info');
   };
 
-  const recordLoanRepayment = (loanId: string, repayment: LoanRepayment) => {
+  const recordLoanRepayment = (loanId: string, repayment: LoanRepayment): Loan | null => {
     const updated = storage.addLoanRepayment(loanId, repayment);
     if (updated) {
       setLoans(storage.getLoans());
       setLedger(storage.getLedgerEntries());
-      showToast(t('repaymentSaved'), 'success');
+      if (repayment.entryType === 'additional_loan') {
+        showToast(
+          language === 'ur'
+            ? 'مزید قرض شامل ہو گیا اور بقایا کھاتہ اپ ڈیٹ کر دیا گیا!'
+            : 'Additional loan recorded and balance updated!',
+          'success'
+        );
+      } else {
+        showToast(t('repaymentSaved'), 'success');
+      }
     }
+    return updated;
   };
 
   const updateLoanRepayment = (loanId: string, repaymentId: string, updatedData: Partial<LoanRepayment>) => {
@@ -577,10 +592,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const saveAmanatAccount = (account: AmanatAccount) => {
-    storage.saveAmanatAccount(account);
+  const saveAmanatAccount = (account: AmanatAccount): AmanatAccount => {
+    const saved = storage.saveAmanatAccount(account);
     setAmanatAccounts(storage.getAmanatAccounts());
+    setLedger(storage.getLedgerEntries());
     showToast(t('amanatSaved'), 'success');
+    return saved;
   };
 
   const deleteAmanatAccount = (accountId: string) => {
@@ -594,13 +611,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  const recordAmanatEntry = (accountId: string, entry: Omit<AmanatEntry, 'id' | 'previousBalance' | 'newBalance'>) => {
+  const recordAmanatEntry = (accountId: string, entry: Omit<AmanatEntry, 'id' | 'previousBalance' | 'newBalance'>): AmanatAccount | null => {
     const updated = storage.addAmanatEntry(accountId, entry);
     if (updated) {
       setAmanatAccounts(storage.getAmanatAccounts());
       setLedger(storage.getLedgerEntries());
       showToast(t('amanatSaved'), 'success');
     }
+    return updated;
   };
 
   const updateAmanatEntry = (accountId: string, entryId: string, updatedData: Partial<AmanatEntry>) => {
@@ -730,6 +748,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const success = storage.deleteStation(id);
     if (success) {
       setStations(storage.getStations());
+      setLedger(storage.getLedgerEntries());
       showToast(
         language === 'ur'
           ? `اسٹیشن "${target.nameUr || target.nameEn}" حذف کر دیا گیا`
@@ -776,6 +795,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updated = storage.recordStationDeposit(stationId, entry);
     if (updated) {
       setStations(storage.getStations());
+      setTransfers(storage.getTransfers());
       setLedger(storage.getLedgerEntries());
       setSavedBanks(storage.getSavedBanks());
       showToast(
@@ -825,6 +845,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const updated = storage.deleteStationEntry(stationId, entryId);
     if (updated) {
       setStations(storage.getStations());
+      setTransfers(storage.getTransfers());
       setLedger(storage.getLedgerEntries());
       showToast(
         language === 'ur'
@@ -867,16 +888,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  const resetDemoData = () => {
+  const resetDemoData = async () => {
     if (denyDeleteIfNotSuperAdmin()) return;
-    storage.resetToDemo();
+    await storage.resetToDemo();
     refreshData();
     showToast(t('dataReset'), 'info');
   };
 
-  const clearAllData = () => {
+  const clearAllData = async () => {
     if (denyDeleteIfNotSuperAdmin()) return;
-    storage.clearAllData();
+    await storage.clearAllData();
     refreshData();
     showToast(
       language === 'ur' ? 'تمام ریکارڈز کامیابی سے صاف کر دیے گئے' : 'All records cleared',

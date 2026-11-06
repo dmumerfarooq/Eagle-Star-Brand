@@ -108,7 +108,13 @@ const AppContent: React.FC = () => {
           {currentScreen === 'orderRegister' && <OrderRegisterView />}
 
           {(currentScreen === 'customers' || currentScreen === 'receivers') && (
-            <CustomersView />
+            <CustomersView
+              onOpenNewTransfer={openNewTransferModal}
+              onEditTransfer={openEditTransferModal}
+              onOpenNewAmanat={handleOpenAmanat}
+              onOpenNewLoan={() => setIsLoanModalOpen(true)}
+              onRecordRepayment={handleOpenRepayment}
+            />
           )}
 
           {currentScreen === 'khata' && (

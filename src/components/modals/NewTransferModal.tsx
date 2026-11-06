@@ -63,11 +63,26 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
   const [bankAccount, setBankAccount] = useState('');
   const [isStationModalOpen, setIsStationModalOpen] = useState(false);
 
-  // Financial inputs
+  // Custom Date, Order Number & Currency state
+  const availableCurrencies =
+    settings.currencies && settings.currencies.length > 0
+      ? settings.currencies
+      : [
+          { code: 'AED', nameEn: 'UAE Dirham (AED)', nameUr: 'درہم (AED)', symbol: 'AED', rateToPKR: settings.defaultExchangeRate || 77.50 },
+          { code: 'PKR', nameEn: 'Pakistani Rupees (PKR)', nameUr: 'پاکستانی روپے (PKR)', symbol: 'PKR', rateToPKR: 1.00 },
+          { code: 'SAR', nameEn: 'Saudi Riyal (SAR)', nameUr: 'سعودی ریال (SAR)', symbol: 'SAR', rateToPKR: 74.20 },
+          { code: 'USD', nameEn: 'US Dollar (USD)', nameUr: 'امریکی ڈالر (USD)', symbol: 'USD', rateToPKR: 278.50 }
+        ];
+
+  const [transferDate, setTransferDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [customOrderNo, setCustomOrderNo] = useState<string>('');
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(settings.defaultTransferCurrency || 'AED');
+
+  // Financial inputs (Bidirectional AED / Currency & PKR)
   const [amountAED, setAmountAED] = useState<number | string>('');
+  const [amountPKRInput, setAmountPKRInput] = useState<number | string>('');
   const [exchangeRate, setExchangeRate] = useState<number | string>(Number(settings.defaultExchangeRate || 77.50).toFixed(2));
   const [commissionRate, setCommissionRate] = useState<number | string>('');
-  const [initialPayoutPKR, setInitialPayoutPKR] = useState<number | string>('');
   const [notes, setNotes] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -76,20 +91,38 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
   const [pkrCalculationBasis, setPkrCalculationBasis] = useState<'gross' | 'net'>('gross');
 
   // Auto-calculated fields
-  const numAmountAED = typeof amountAED === 'number' ? amountAED : Number(amountAED) || 0;
-  const numExchangeRate = typeof exchangeRate === 'number' ? exchangeRate : Number(exchangeRate) || 77.50;
+  const numExchangeRate = typeof exchangeRate === 'number' ? exchangeRate : Number(exchangeRate) || ( settings.defaultExchangeRate || 77.50 );
+  const rawNumAED = typeof amountAED === 'number' ? amountAED : Number(amountAED) || 0;
+  const rawNumPKR = typeof amountPKRInput === 'number' ? amountPKRInput : Number(amountPKRInput) || 0;
+
+  const numAmountAED =
+    selectedCurrency === 'PKR'
+      ? rawNumAED > 0
+        ? rawNumAED
+        : numExchangeRate > 0
+        ? Number((rawNumPKR / numExchangeRate).toFixed(2))
+        : 0
+      : rawNumAED;
+
   const numCommissionRate = typeof commissionRate === 'number' ? commissionRate : Number(commissionRate) || 0;
-  const numInitialPayoutPKR = typeof initialPayoutPKR === 'number' ? initialPayoutPKR : Number(initialPayoutPKR) || 0;
 
   // Commission is deducted from the Dirham amount (1000 AED - 10% = 900 AED)
   const commissionAmount = Math.round((numAmountAED * numCommissionRate) / 100);
-  const totalCollectedAED = Math.max(0, numAmountAED - commissionAmount);
+  const totalCollectedAED = Math.max(0, Number((numAmountAED - commissionAmount).toFixed(2)));
   
-  // PKR calculation: default on gross amount, or net amount if selected
+  // PKR calculation: if user entered PKR directly in PKR mode (or typed PKR), honor exact PKR unless net commission deduction applies
   const effectiveAedForPkr = pkrCalculationBasis === 'net' && commissionAmount > 0 ? totalCollectedAED : numAmountAED;
-  const amountPKR = Math.round(effectiveAedForPkr * numExchangeRate);
+  const computedPkrFromAed = Math.round(effectiveAedForPkr * numExchangeRate);
+  const amountPKR =
+    selectedCurrency === 'PKR' && rawNumPKR > 0
+      ? pkrCalculationBasis === 'net' && numCommissionRate > 0
+        ? Math.round(rawNumPKR * (1 - numCommissionRate / 100))
+        : Math.round(rawNumPKR)
+      : rawNumPKR > 0 && pkrCalculationBasis === 'gross'
+      ? Math.round(rawNumPKR)
+      : computedPkrFromAed;
+
   const netPayablePKR = amountPKR;
-  const remainingBalancePKR = Math.max(0, netPayablePKR - numInitialPayoutPKR);
 
   // Station running balance preview
   const selectedStationObj = stations.find(
@@ -104,8 +137,18 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
   // Calculate how much will be deducted from the selected Amanat account in its native currency
   const amanatDeductionInAccountCurrency = selectedAmanatAcc
     ? selectedAmanatAcc.currency === 'AED'
-      ? totalCollectedAED
-      : netPayablePKR
+      ? totalCollectedAED > 0
+        ? totalCollectedAED
+        : numAmountAED > 0
+        ? numAmountAED
+        : numExchangeRate > 0 && netPayablePKR > 0
+        ? Number((netPayablePKR / numExchangeRate).toFixed(2))
+        : 0
+      : netPayablePKR > 0
+      ? netPayablePKR
+      : computedPkrFromAed > 0
+      ? computedPkrFromAed
+      : Math.round(numAmountAED * numExchangeRate)
     : 0;
 
   const isAmanatInsufficient = Boolean(
@@ -114,7 +157,24 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
       amanatDeductionInAccountCurrency > selectedAmanatAcc.currentBalance
   );
 
-
+  const handleCurrencySelect = (currCode: string) => {
+    setSelectedCurrency(currCode);
+    const matchedCurr = availableCurrencies.find(c => c.code === currCode);
+    if (currCode === 'PKR') {
+      // Keep current exchangeRate for reference AED calculation, and if AED was entered, populate PKR
+      if (rawNumAED > 0 && !rawNumPKR) {
+        setAmountPKRInput(String(Math.round(rawNumAED * numExchangeRate)));
+      }
+    } else if (matchedCurr && matchedCurr.rateToPKR > 0) {
+      const newRate = matchedCurr.code === 'AED' ? (settings.defaultExchangeRate || matchedCurr.rateToPKR) : matchedCurr.rateToPKR;
+      setExchangeRate(Number(newRate).toFixed(2));
+      if (rawNumAED > 0) {
+        setAmountPKRInput(String(Math.round(rawNumAED * newRate)));
+      } else if (rawNumPKR > 0) {
+        setAmountAED(String(Number((rawNumPKR / newRate).toFixed(2))));
+      }
+    }
+  };
 
   // Effect to populate form on edit or reset to defaults
   useEffect(() => {
@@ -122,18 +182,37 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
 
     if (activeTransferToEdit) {
       // Editing existing transfer
+      setTransferDate(activeTransferToEdit.date || new Date().toISOString().split('T')[0]);
+      setCustomOrderNo(activeTransferToEdit.orderNumber || '');
+      setSelectedCurrency(activeTransferToEdit.inputCurrency || 'AED');
+
+      const existingAmanat = amanatAccounts.find(
+        a =>
+          a.id === activeTransferToEdit.senderId ||
+          a.accountNo === activeTransferToEdit.senderId ||
+          (a.entries || []).some(
+            e =>
+              e.receiptNo === activeTransferToEdit.receiptNumber ||
+              (e.type === 'third_party_payment' && e.description.includes(activeTransferToEdit.orderNumber))
+          )
+      );
       const existingCust = customers.find(c => c.id === activeTransferToEdit.senderId);
-      if (existingCust) {
+
+      if (existingAmanat) {
+        setSenderMode('amanat');
+        setFundingSource('amanat');
+        setSelectedAmanatId(existingAmanat.id);
+      } else if (existingCust) {
         setSenderMode('existing');
+        setFundingSource('cash');
         setSelectedSenderId(existingCust.id);
       } else {
         setSenderMode('new');
+        setFundingSource('cash');
         setNewSenderName(activeTransferToEdit.senderName || '');
         setNewSenderPhone(activeTransferToEdit.senderPhone || '');
         setNewSenderCity(activeTransferToEdit.senderCity || 'Dubai');
       }
-
-      setFundingSource('cash');
 
       const existingRec = receivers.find(r => r.id === activeTransferToEdit.receiverId);
       if (existingRec) {
@@ -168,14 +247,24 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
       setBankName(activeTransferToEdit.bankName || 'Meezan Bank میزان بینک');
       setBankAccount(activeTransferToEdit.accountNumber || '');
 
-      setAmountAED(activeTransferToEdit.amountAED);
+      setAmountAED(activeTransferToEdit.amountAED ? activeTransferToEdit.amountAED : '');
+      setAmountPKRInput(activeTransferToEdit.amountPKR || activeTransferToEdit.netPayablePKR || '');
       setExchangeRate(Number(activeTransferToEdit.exchangeRate || settings.defaultExchangeRate || 77.50).toFixed(2));
-      setCommissionRate(activeTransferToEdit.commissionRate || '');
-      setInitialPayoutPKR(activeTransferToEdit.amountPaidPKR || '');
+      setCommissionRate(activeTransferToEdit.commissionRate ? activeTransferToEdit.commissionRate : '');
       setNotes(activeTransferToEdit.notes || '');
       setConfirmDelete(false);
     } else {
       // New transfer - reset to clean blank state
+      setTransferDate(new Date().toISOString().split('T')[0]);
+      setCustomOrderNo(`${settings.orderNumberPrefix}${Math.floor(10 + Math.random() * 90)}-2026`);
+      const defaultCurr = settings.defaultTransferCurrency || 'AED';
+      setSelectedCurrency(defaultCurr);
+      const matchedDefaultCurr = availableCurrencies.find(c => c.code === defaultCurr);
+      const initialRate =
+        defaultCurr === 'AED' || defaultCurr === 'PKR'
+          ? Number(settings.defaultExchangeRate || 77.50)
+          : Number(matchedDefaultCurr?.rateToPKR || settings.defaultExchangeRate || 77.50);
+
       setSenderMode('existing');
       if (customers.length > 0) {
         setSelectedSenderId(customers[0].id);
@@ -205,13 +294,13 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
 
       setSelectedChannel('mirali');
       setAmountAED('');
-      setExchangeRate(Number(settings.defaultExchangeRate || 77.50).toFixed(2));
+      setAmountPKRInput('');
+      setExchangeRate(initialRate.toFixed(2));
       setCommissionRate('');
-      setInitialPayoutPKR('');
       setNotes('');
       setConfirmDelete(false);
     }
-  }, [isOpen, activeTransferToEdit, customers, receivers, amanatAccounts, settings.defaultExchangeRate]);
+  }, [isOpen, activeTransferToEdit, customers, receivers, amanatAccounts, settings.defaultExchangeRate, settings.defaultTransferCurrency]);
 
   // Update station when existing receiver changes
   const handleSelectReceiver = (recId: string) => {
@@ -238,21 +327,32 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
   };
 
   const handleSubmit = (printImmediately: boolean) => {
-    if (isAmanatInsufficient) {
-      showToast(
-        language === 'ur'
-          ? 'امانت کھاتے میں ناکافی بیلنس ہے!'
-          : 'Insufficient balance in selected Amanat account!',
-        'error'
-      );
-      return;
+    if (fundingSource === 'amanat') {
+      if (!selectedAmanatAcc) {
+        showToast(
+          language === 'ur'
+            ? 'برائے مہربانی پیسہ جمع کھاتہ منتخب کریں!'
+            : 'Please select a Cash Jama account!',
+          'error'
+        );
+        return;
+      }
+      if (isAmanatInsufficient) {
+        showToast(
+          language === 'ur'
+            ? `پیسہ جمع کھاتے میں ناکافی بیلنس ہے! دستیاب رقم: ${selectedAmanatAcc.currentBalance.toLocaleString()} ${selectedAmanatAcc.currency}، کٹوتی: ${amanatDeductionInAccountCurrency.toLocaleString()} ${selectedAmanatAcc.currency}`
+            : `Insufficient balance in selected Cash Jama account! Available: ${selectedAmanatAcc.currentBalance.toLocaleString()} ${selectedAmanatAcc.currency}`,
+          'error'
+        );
+        return;
+      }
     }
 
-    if (!amountAED || numAmountAED <= 0) {
+    if (numAmountAED <= 0 && amountPKR <= 0) {
       showToast(
         language === 'ur'
-          ? 'برائے مہربانی درہم (AED) کی درست رقم درج کریں!'
-          : 'Please enter a valid transfer amount in AED!',
+          ? 'برائے مہربانی ٹرانسفر کی درست رقم (PKR یا AED) درج کریں!'
+          : 'Please enter a valid transfer amount in PKR or AED!',
         'error'
       );
       return;
@@ -383,13 +483,6 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
       finalPayoutMethod = rec?.payoutMethod || finalPayoutMethod;
     }
 
-    let status: TransferStatus = 'Received';
-    if (numInitialPayoutPKR >= netPayablePKR) {
-      status = 'Completed';
-    } else if (numInitialPayoutPKR > 0) {
-      status = 'Partially Paid';
-    }
-
     const transferNote =
       fundingSource === 'amanat' && selectedAmanatAcc
         ? `${notes ? notes + ' — ' : ''}${
@@ -400,11 +493,15 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
         : notes;
 
     let savedTransferRecord: MoneyTransfer;
+    const effectiveDate = transferDate || new Date().toISOString().split('T')[0];
 
     if (activeTransferToEdit) {
-      // Editing existing transfer
+      // Editing existing transfer — always full one-go transfer
       savedTransferRecord = {
         ...activeTransferToEdit,
+        orderNumber: customOrderNo.trim() || activeTransferToEdit.orderNumber,
+        date: effectiveDate,
+        inputCurrency: selectedCurrency,
         senderId: finalSenderId,
         senderName: finalSenderName,
         senderPhone: finalSenderPhone,
@@ -423,17 +520,41 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
         amountPKR: Number(amountPKR),
         commissionType: 'percentage',
         commissionRate: numCommissionRate,
-        commissionBase: 'AED',
+        commissionBase: selectedCurrency === 'PKR' ? 'PKR' : 'AED',
         commissionAmount: Number(commissionAmount),
         totalCollectedAED: Number(totalCollectedAED),
         netPayablePKR: Number(netPayablePKR),
-        amountPaidPKR: numInitialPayoutPKR,
-        remainingBalancePKR: Number(remainingBalancePKR),
-        status,
+        amountPaidPKR: Number(netPayablePKR),
+        remainingBalancePKR: 0,
+        status: 'Completed',
         notes: transferNote
       };
 
       savedTransferRecord = saveTransfer(savedTransferRecord);
+
+      // If this edited transfer is funded from Amanat, ensure an entry exists
+      if (fundingSource === 'amanat' && selectedAmanatAcc && amanatDeductionInAccountCurrency > 0) {
+        const hasExisting = (selectedAmanatAcc.entries || []).some(
+          e =>
+            e.receiptNo === savedTransferRecord.receiptNumber ||
+            (e.type === 'third_party_payment' && e.description.includes(savedTransferRecord.orderNumber))
+        );
+        if (!hasExisting) {
+          recordAmanatEntry(selectedAmanatAcc.id, {
+            accountId: selectedAmanatAcc.id,
+            date: effectiveDate,
+            type: 'third_party_payment',
+            amount: Number(amanatDeductionInAccountCurrency),
+            currency: selectedAmanatAcc.currency,
+            description:
+              language === 'ur'
+                ? `منی ٹرانسفر آرڈر #${savedTransferRecord.orderNumber} (${station || 'میرعلی'}) کے لیے پیسہ جمع سے خودکار کٹوتی`
+                : `Auto-deducted for Money Transfer Order #${savedTransferRecord.orderNumber} (${station || 'Mirali'})`,
+            relatedPerson: `${finalReceiverName} (${finalReceiverPhone})`,
+            receiptNo: savedTransferRecord.receiptNumber
+          });
+        }
+      }
 
       showToast(
         language === 'ur'
@@ -443,15 +564,17 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
       );
     } else {
       // New Transfer
-      const orderNo = `${settings.orderNumberPrefix}${Math.floor(10 + Math.random() * 90)}-2026`;
+      const orderNo =
+        customOrderNo.trim() || `${settings.orderNumberPrefix}${Math.floor(10 + Math.random() * 90)}-2026`;
       const receiptNo = `${settings.receiptPrefix}-${Math.floor(10000 + Math.random() * 90000)}`;
 
       savedTransferRecord = {
         id: `tr-${Date.now()}`,
         orderNumber: orderNo,
         receiptNumber: receiptNo,
-        date: new Date().toISOString().split('T')[0],
+        date: effectiveDate,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        inputCurrency: selectedCurrency,
         senderId: finalSenderId,
         senderName: finalSenderName,
         senderPhone: finalSenderPhone,
@@ -471,7 +594,7 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
         amountPKR: Number(amountPKR),
         commissionType: 'percentage',
         commissionRate: numCommissionRate,
-        commissionBase: 'AED',
+        commissionBase: selectedCurrency === 'PKR' ? 'PKR' : 'AED',
         commissionAmount: Number(commissionAmount),
         additionalCharges: 0,
         totalCollectedAED: Number(totalCollectedAED),
@@ -482,7 +605,7 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
           {
             id: `pay-${Date.now()}`,
             transferId: `tr-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
+            date: effectiveDate,
             receiverName: finalReceiverName,
             amountPKR: Number(netPayablePKR),
             paymentMethod: finalPayoutMethod,
@@ -502,7 +625,7 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
       if (fundingSource === 'amanat' && selectedAmanatAcc && amanatDeductionInAccountCurrency > 0) {
         recordAmanatEntry(selectedAmanatAcc.id, {
           accountId: selectedAmanatAcc.id,
-          date: new Date().toISOString().split('T')[0],
+          date: effectiveDate,
           type: 'third_party_payment',
           amount: Number(amanatDeductionInAccountCurrency),
           currency: selectedAmanatAcc.currency,
@@ -557,7 +680,44 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Form Body */}
-        <div className="p-6 overflow-y-auto max-h-[80vh] space-y-6">
+        <div className="p-6 overflow-y-auto max-h-[80vh] space-y-5">
+          {/* Top Bar: Custom Date & Order Number */}
+          <div className="bg-slate-100/90 p-3.5 rounded-xl border border-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-800">
+                  {language === 'ur' ? 'تاریخ (Custom Transfer Date) *' : 'Transfer Date (Custom Date) *'}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTransferDate(new Date().toISOString().split('T')[0])}
+                  className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  {language === 'ur' ? 'آج کی تاریخ' : 'Set Today'}
+                </button>
+              </div>
+              <input
+                type="date"
+                value={transferDate}
+                onChange={e => setTransferDate(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs sm:text-sm font-mono font-bold text-slate-950 focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-800 block mb-1">
+                {language === 'ur' ? 'آرڈر نمبر (Order Number - قابل ترمیم)' : 'Order Number (Editable)'}
+              </label>
+              <input
+                type="text"
+                value={customOrderNo}
+                onChange={e => setCustomOrderNo(e.target.value)}
+                placeholder="e.g. 10913-2026"
+                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs sm:text-sm font-mono font-bold text-slate-950 focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
           {/* Step 1: Sender (Dubai) & Funding Source */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -571,10 +731,10 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                     setSenderMode('existing');
                     setFundingSource('cash');
                   }}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
+                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
                     senderMode === 'existing' && fundingSource === 'cash'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-600 hover:bg-slate-200'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-200 bg-white border border-slate-300'
                   }`}
                 >
                   {language === 'ur' ? 'موجودہ گاہک (نقد)' : 'Existing Customer (Cash)'}
@@ -585,10 +745,10 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                     setSenderMode('new');
                     setFundingSource('cash');
                   }}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
+                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
                     senderMode === 'new' && fundingSource === 'cash'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-600 hover:bg-slate-200'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-200 bg-white border border-slate-300'
                   }`}
                 >
                   + {language === 'ur' ? 'نیا گاہک' : 'New Customer'}
@@ -598,42 +758,117 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                   onClick={() => {
                     setSenderMode('amanat');
                     setFundingSource('amanat');
+                    if (amanatAccounts.length > 0 && !selectedAmanatId) {
+                      setSelectedAmanatId(amanatAccounts[0].id);
+                    }
                   }}
-                  className={`px-2.5 py-1 rounded-md font-bold transition ${
-                    fundingSource === 'amanat'
-                      ? 'bg-cyan-700 text-white shadow-sm'
-                      : 'bg-cyan-50 text-cyan-900 border border-cyan-300 hover:bg-cyan-100'
+                  className={`px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                    senderMode === 'amanat' || fundingSource === 'amanat'
+                      ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400'
+                      : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300'
                   }`}
                 >
-                  {language === 'ur' ? 'پیسہ جمع کھاتہ سے ٹرانسفر' : 'From Saved Cash Jamah'}
+                  <span>💰</span>
+                  <span>{language === 'ur' ? 'پیسہ جمع کھاتہ سے بھیجیں' : 'Send from Cash Jama (Saved Money)'}</span>
                 </button>
               </div>
             </div>
 
-            {fundingSource === 'amanat' ? (
-              <div className="bg-cyan-50/70 border border-cyan-200 rounded-xl p-3.5 space-y-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-800 block mb-1">
-                    {language === 'ur'
-                      ? 'گاہک کا پیسہ جمع کھاتہ منتخب کریں (خودکار کھاتہ کٹوتی):'
-                      : 'Select Customer Saved Cash Jamah Khata (Auto-Deduct):'}
+            {senderMode === 'amanat' ? (
+              <div className="space-y-3 bg-emerald-50/80 border-2 border-emerald-300 rounded-xl p-3.5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <label className="text-xs font-bold text-emerald-950 font-urdu-heading flex items-center gap-1.5">
+                    <span>🏦</span>
+                    <span>{language === 'ur' ? 'انفرادی پیسہ جمع کھاتہ منتخب کریں:' : 'Select Cash Jama (Saved Money) Khata:'}</span>
                   </label>
-                  <select
-                    value={selectedAmanatId}
-                    onChange={e => {
-                      const id = e.target.value;
-                      setSelectedAmanatId(id);
-                    }}
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-950"
-                  >
-                    {amanatAccounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.ownerName} ({acc.accountNo}) — {language === 'ur' ? 'موجودہ پیسہ جمع:' : 'Balance:'}{' '}
-                        {acc.currentBalance.toLocaleString()} {acc.currency}
-                      </option>
-                    ))}
-                  </select>
+                  {selectedAmanatAcc && (
+                    <span className="text-[11px] font-bold bg-emerald-700 text-white px-2.5 py-0.5 rounded-full font-mono shadow-sm">
+                      {language === 'ur' ? 'دستیاب بیلنس: ' : 'Available: '}
+                      {selectedAmanatAcc.currentBalance.toLocaleString()} {selectedAmanatAcc.currency}
+                    </span>
+                  )}
                 </div>
+
+                {amanatAccounts.length === 0 ? (
+                  <div className="text-xs text-amber-800 bg-amber-50 p-3 rounded-lg border border-amber-200 font-urdu-body">
+                    {language === 'ur'
+                      ? 'فی الوقت کوئی پیسہ جمع کھاتہ موجود نہیں ہے۔ پہلے انفرادی پیسہ جمع کھاتہ بنائیں یا نقد گاہک منتخب کریں۔'
+                      : 'No Cash Jama Khata accounts exist yet. Please create one in Individual Cash Jama or choose Cash.'}
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={selectedAmanatId}
+                      onChange={e => setSelectedAmanatId(e.target.value)}
+                      className="w-full bg-white border border-emerald-400 rounded-lg p-2.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                    >
+                      {amanatAccounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.ownerName} ({acc.accountNo}) - {acc.ownerPhone || 'No Phone'} — بیلنس: {acc.currentBalance.toLocaleString()} {acc.currency}
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedAmanatAcc && (
+                      <div className="bg-white border border-emerald-200 rounded-lg p-3 text-xs space-y-2 shadow-inner">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <div>
+                            <span className="text-slate-500 block text-[11px] font-urdu-heading">
+                              {language === 'ur' ? 'کھاتہ دار:' : 'Account Holder:'}
+                            </span>
+                            <span className="font-bold text-slate-900 text-sm">{selectedAmanatAcc.ownerName}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[11px] font-urdu-heading">
+                              {language === 'ur' ? 'اکاؤنٹ نمبر:' : 'Account No:'}
+                            </span>
+                            <span className="font-mono font-bold text-slate-800 text-sm">{selectedAmanatAcc.accountNo}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[11px] font-urdu-heading">
+                              {language === 'ur' ? 'موجودہ بیلنس:' : 'Current Balance:'}
+                            </span>
+                            <span className="font-mono font-black text-emerald-700 text-sm">
+                              {selectedAmanatAcc.currentBalance.toLocaleString()} {selectedAmanatAcc.currency}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-emerald-100 flex items-center justify-between text-xs">
+                          <span className="text-slate-700 font-bold font-urdu-body">
+                            {language === 'ur' ? 'اس ٹرانسفر پر کھاتہ سے کٹوتی:' : 'Deduction for this transfer:'}
+                          </span>
+                          <span className="font-mono font-black text-rose-700 text-sm">
+                            - {amanatDeductionInAccountCurrency.toLocaleString()} {selectedAmanatAcc.currency}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-900 font-bold font-urdu-body">
+                            {language === 'ur' ? 'کٹوتی کے بعد متوقع بیلنس:' : 'Remaining Balance after transfer:'}
+                          </span>
+                          <span
+                            className={`font-mono font-black text-sm ${
+                              isAmanatInsufficient ? 'text-red-600' : 'text-emerald-700'
+                            }`}
+                          >
+                            {(selectedAmanatAcc.currentBalance - amanatDeductionInAccountCurrency).toLocaleString()}{' '}
+                            {selectedAmanatAcc.currency}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-emerald-900 bg-emerald-50/90 p-2 rounded border border-emerald-200 flex items-center gap-1.5 font-urdu-body font-semibold">
+                          <span>✓</span>
+                          <span>
+                            {language === 'ur'
+                              ? 'ٹرانسفر محفوظ ہوتے ہی یہ رقم اس پیسہ جمع کھاتہ سے خودکار وضع (Auto Deduct) ہو جائے گی اور نیا بیلنس محفوظ ہوگا۔'
+                              : 'When saved, this transfer will auto-deduct from this Cash Jama Khata and update its live balance.'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ) : senderMode === 'existing' ? (
               <div>
@@ -705,18 +940,10 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
 
             {/* Payout Channel Quick Options (Bank, EasyPaisa, JazzCash, NayaPay, SadaPay, Raast, Cash) */}
             <div className="pt-1 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-slate-700 font-bold font-urdu-heading">
+              <div>
+                <label className="text-xs text-slate-700 font-bold font-urdu-heading block mb-1">
                   {language === 'ur' ? 'طریقہ ترسیل (Transfer Via Bank, EasyPaisa, JazzCash, Counter):' : 'Transfer Via (Bank, EasyPaisa, JazzCash, Counter):'}
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsStationModalOpen(true)}
-                  className="text-[11px] text-blue-700 hover:text-blue-900 font-semibold flex items-center gap-1 font-urdu"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>{language === 'ur' ? '+ نیا اسٹیشن' : '+ New Station'}</span>
-                </button>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-bold">
@@ -869,9 +1096,10 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                     <button
                       type="button"
                       onClick={() => setIsStationModalOpen(true)}
-                      className="text-[11px] text-blue-700 hover:text-blue-900 font-semibold"
+                      className="text-xs text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer transition shadow-2xs"
                     >
-                      + {language === 'ur' ? 'نیا اسٹیشن' : 'New Station'}
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{language === 'ur' ? 'نیا اسٹیشن' : 'New Station'}</span>
                     </button>
                   </div>
                   <div className="flex gap-1.5">
@@ -939,9 +1167,10 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                       <button
                         type="button"
                         onClick={() => setIsStationModalOpen(true)}
-                        className="text-[11px] text-blue-700 hover:text-blue-900 font-semibold"
+                        className="text-xs text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer transition shadow-2xs"
                       >
-                        + {language === 'ur' ? 'نیا اسٹیشن' : 'New Station'}
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{language === 'ur' ? 'نیا اسٹیشن' : 'New Station'}</span>
                       </button>
                     </div>
                     <select
@@ -1074,16 +1303,121 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
 
           {/* Step 3: Financial Calculations */}
           <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-200/90 space-y-4">
-            <div className="flex items-center gap-2">
-              <Calculator className="w-4 h-4 text-emerald-700" />
-              <label className="text-xs font-bold uppercase tracking-wider text-emerald-950">
-                3. {language === 'ur' ? 'مالیاتی حساب کتاب اور شرح تبادلہ' : 'Financial & Exchange Calculations'}
-              </label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-emerald-700" />
+                <label className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                  3. {language === 'ur' ? 'مالیاتی حساب کتاب، کرنسی (PKR / AED) اور تاریخ' : 'Financial & Exchange Calculations (PKR & AED)'}
+                </label>
+              </div>
+
+              {/* Quick Currency Toggle Buttons */}
+              <div className="inline-flex bg-white p-1 rounded-lg border border-emerald-300 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => handleCurrencySelect('AED')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                    selectedCurrency === 'AED'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {language === 'ur' ? 'درہم (AED)' : 'AED (درہم)'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCurrencySelect('PKR')}
+                  className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                    selectedCurrency === 'PKR'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {language === 'ur' ? 'پاکستانی روپے (PKR)' : 'PKR (پاکستانی روپے)'}
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Row 1: Currency Dropdown + Custom Date inside Financial Section */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">{t('amountAed')} *</label>
+                <label className="text-xs font-bold text-slate-800 block mb-1">
+                  {language === 'ur' ? 'کرنسی منتخب کریں (Currency Dropdown) *' : 'Select Currency (PKR / AED / Other) *'}
+                </label>
+                <select
+                  value={selectedCurrency}
+                  onChange={e => handleCurrencySelect(e.target.value)}
+                  className="w-full bg-white border-2 border-emerald-500 rounded-lg p-2.5 text-sm font-bold text-slate-950 focus:ring-2 focus:ring-emerald-500"
+                >
+                  {availableCurrencies.map(curr => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} — {language === 'ur' ? curr.nameUr : `${curr.nameEn} (${curr.nameUr})`}
+                      {curr.code !== 'PKR' ? ` [Rate: ${curr.rateToPKR}]` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-800">
+                    {language === 'ur' ? 'تاریخ (Custom Date) *' : 'Transfer Date (Custom Date) *'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setTransferDate(new Date().toISOString().split('T')[0])}
+                    className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                  >
+                    {language === 'ur' ? 'آج کی تاریخ' : 'Today'}
+                  </button>
+                </div>
+                <input
+                  type="date"
+                  value={transferDate}
+                  onChange={e => setTransferDate(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-mono font-bold text-slate-950 focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Amount in PKR (Pakistani Rupees), Amount in AED / Selected Currency, Exchange Rate, Commission */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Direct PKR (Pakistani Rupees) Input */}
+              <div className={selectedCurrency === 'PKR' ? 'sm:col-span-2 lg:col-span-1 order-1' : 'order-2'}>
+                <label className="text-xs font-bold text-emerald-950 block mb-1">
+                  {language === 'ur' ? 'رقم پاکستانی روپے (Amount PKR) *' : 'Amount (PKR پاکستانی روپے) *'}
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={amountPKRInput}
+                  onChange={e => {
+                    const cleaned = normalizeNumericInput(e.target.value);
+                    setAmountPKRInput(cleaned);
+                    const pkrVal = parseFloat(cleaned) || 0;
+                    const rateVal = parseFloat(String(exchangeRate)) || settings.defaultExchangeRate || 77.50;
+                    if (pkrVal > 0 && rateVal > 0) {
+                      setAmountAED(String(Number((pkrVal / rateVal).toFixed(2))));
+                    } else if (!cleaned) {
+                      setAmountAED('');
+                    }
+                  }}
+                  placeholder=""
+                  className={`w-full bg-white rounded-lg p-2.5 text-sm font-mono font-bold text-slate-950 ${
+                    selectedCurrency === 'PKR'
+                      ? 'border-2 border-emerald-600 ring-2 ring-emerald-500/20'
+                      : 'border border-slate-300'
+                  }`}
+                />
+              </div>
+
+              {/* Amount in AED / Foreign Currency */}
+              <div className={selectedCurrency !== 'PKR' ? 'order-1' : 'order-2'}>
+                <label className="text-xs font-bold text-slate-800 block mb-1">
+                  {selectedCurrency === 'PKR'
+                    ? (language === 'ur' ? 'مساوی درہم (Amount AED)' : 'Equivalent (AED)')
+                    : `${language === 'ur' ? `رقم (${selectedCurrency})` : `Amount (${selectedCurrency})`} *`}
+                </label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -1091,14 +1425,28 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                   onChange={e => {
                     const cleaned = normalizeNumericInput(e.target.value);
                     setAmountAED(cleaned);
+                    const aedVal = parseFloat(cleaned) || 0;
+                    const rateVal = parseFloat(String(exchangeRate)) || settings.defaultExchangeRate || 77.50;
+                    if (aedVal > 0 && rateVal > 0) {
+                      setAmountPKRInput(String(Math.round(aedVal * rateVal)));
+                    } else if (!cleaned) {
+                      setAmountPKRInput('');
+                    }
                   }}
-                  placeholder="e.g. 1000"
-                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-mono font-bold"
+                  placeholder=""
+                  className={`w-full bg-white rounded-lg p-2.5 text-sm font-mono font-bold text-slate-950 ${
+                    selectedCurrency !== 'PKR'
+                      ? 'border-2 border-emerald-600 ring-2 ring-emerald-500/20'
+                      : 'border border-slate-300'
+                  }`}
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">{t('exchangeRate')} *</label>
+              {/* Exchange Rate (Editable) */}
+              <div className="order-3">
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  {t('exchangeRate')} *
+                </label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -1106,13 +1454,22 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                   onChange={e => {
                     const cleaned = normalizeNumericInput(e.target.value);
                     setExchangeRate(cleaned);
+                    const rateVal = parseFloat(cleaned) || 0;
+                    if (rateVal > 0) {
+                      if (selectedCurrency === 'PKR' && rawNumPKR > 0) {
+                        setAmountAED(String(Number((rawNumPKR / rateVal).toFixed(2))));
+                      } else if (rawNumAED > 0) {
+                        setAmountPKRInput(String(Math.round(rawNumAED * rateVal)));
+                      }
+                    }
                   }}
-                  placeholder="e.g. 77.50"
+                  placeholder=""
                   className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-mono font-bold"
                 />
               </div>
 
-              <div>
+              {/* Commission % */}
+              <div className="order-4">
                 <label className="text-xs font-semibold text-slate-700 block mb-1">{t('commissionPercentage')}</label>
                 <input
                   type="text"
@@ -1122,7 +1479,7 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
                     const cleaned = normalizeNumericInput(e.target.value);
                     setCommissionRate(cleaned);
                   }}
-                  placeholder="0"
+                  placeholder=""
                   className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-mono"
                 />
               </div>
@@ -1343,6 +1700,18 @@ export const NewTransferModal: React.FC<NewTransferModalProps> = ({ isOpen, onCl
       <StationModal
         isOpen={isStationModalOpen}
         onClose={() => setIsStationModalOpen(false)}
+        returnToLabel={language === 'ur' ? '← واپس منی ٹرانسفر پر جائیں' : '← Back to Money Transfer'}
+        onStationCreated={(newSt) => {
+          const stName = newSt.nameUr || newSt.nameEn;
+          setStation(stName);
+          setIsStationModalOpen(false);
+          showToast(
+            language === 'ur'
+              ? `نیا اسٹیشن "${stName}" کامیابی سے شامل اور منتخب ہو گیا!`
+              : `Station "${stName}" created and selected!`,
+            'success'
+          );
+        }}
       />
     </div>
   );

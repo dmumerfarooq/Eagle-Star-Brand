@@ -54,7 +54,7 @@ export const StationDepositModal: React.FC<StationDepositModalProps> = ({
   const [txType, setTxType] = useState<StationTransactionType>('deposit_topup');
   const [currency, setCurrency] = useState<'PKR' | 'AED'>('PKR');
   const [amountInput, setAmountInput] = useState('');
-  const [exchangeRate, setExchangeRate] = useState(settings.defaultExchangeRate || 77.50);
+  const [exchangeRate, setExchangeRate] = useState<number | string>(settings.defaultExchangeRate || 77.50);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Bank Transfer');
   const [bankName, setBankName] = useState('Meezan Bank (میزان بینک)');
   const [accountNumber, setAccountNumber] = useState('');
@@ -83,7 +83,7 @@ export const StationDepositModal: React.FC<StationDepositModalProps> = ({
         setDate(entryToEdit.date);
         setTxType(entryToEdit.type || 'deposit_topup');
         setCurrency('PKR');
-        setAmountInput(String(entryToEdit.amountPKR));
+        setAmountInput(entryToEdit.amountPKR ? String(entryToEdit.amountPKR) : '');
         setExchangeRate(entryToEdit.exchangeRate || settings.defaultExchangeRate || 77.50);
         setPaymentMethod(entryToEdit.paymentMethod || 'Bank Transfer');
         setBankName(
@@ -131,7 +131,8 @@ export const StationDepositModal: React.FC<StationDepositModalProps> = ({
 
   const currentStation = stations.find(s => s.id === stationId);
   const numericAmount = parseFloat(amountInput) || 0;
-  const effectiveRate = exchangeRate > 0 ? exchangeRate : (settings.defaultExchangeRate || 77.50);
+  const numExchangeRate = typeof exchangeRate === 'number' ? exchangeRate : parseFloat(String(exchangeRate)) || 0;
+  const effectiveRate = numExchangeRate > 0 ? numExchangeRate : (settings.defaultExchangeRate || 77.50);
   const amountPKR = currency === 'AED' ? Math.round(numericAmount * effectiveRate) : numericAmount;
   const amountAED = currency === 'AED' ? numericAmount : Math.round(amountPKR / effectiveRate);
 
@@ -560,7 +561,8 @@ export const StationDepositModal: React.FC<StationDepositModalProps> = ({
                   type="number"
                   step="0.01"
                   value={exchangeRate}
-                  onChange={e => setExchangeRate(parseFloat(e.target.value) || 77.50)}
+                  onChange={e => setExchangeRate(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                  placeholder="77.50"
                   className="w-20 bg-white border border-blue-300 rounded-lg p-1 text-center font-mono text-xs font-black"
                 />
                 <span>= {formatMoney(amountPKR, 'PKR')}</span>

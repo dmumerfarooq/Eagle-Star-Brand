@@ -2,6 +2,8 @@
 -- EAGLE STAR BRAND (ایگل اسٹار برانڈ)
 -- Complete MySQL 8.0+ / MariaDB 10.5+ Relational Database Schema
 -- Money Transfer, Station Ledger, Cash Jama (Amanat) & Khata System
+-- Supports Multi-Currency (PKR, AED, SAR, USD, OMR, GBP & Custom Currencies),
+-- Custom Dates, Full History Editing, and Super Admin Access Control
 -- Designed & Developed by Burraq Digits
 -- ============================================================================
 
@@ -27,14 +29,14 @@ CREATE TABLE IF NOT EXISTS `users` (
   `station_access` VARCHAR(120) NOT NULL DEFAULT 'all',
   `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   `permissions_json` JSON DEFAULT NULL,
-  `last_login` DATETIME DEFAULT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_login` VARCHAR(64) DEFAULT NULL,
+  `created_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_users_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- 2. BUSINESS SETTINGS & MANUAL AED EXCHANGE RATE
+-- 2. BUSINESS SETTINGS, CURRENCIES & MANUAL AED EXCHANGE RATE
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `business_settings` (
   `id` INT NOT NULL DEFAULT 1,
@@ -49,13 +51,17 @@ CREATE TABLE IF NOT EXISTS `business_settings` (
   `whatsapp` VARCHAR(60) DEFAULT NULL,
   `email` VARCHAR(150) DEFAULT NULL,
   `default_exchange_rate` DECIMAL(12, 2) NOT NULL DEFAULT 77.50,
+  `default_transfer_currency` VARCHAR(16) NOT NULL DEFAULT 'AED',
+  `currencies_json` LONGTEXT DEFAULT NULL,
   `manual_rate_updated_at` VARCHAR(64) DEFAULT NULL,
   `manual_rate_updated_by` VARCHAR(150) DEFAULT NULL,
   `default_commission_pct` DECIMAL(8, 2) NOT NULL DEFAULT 1.00,
-  `commission_base` ENUM('AED', 'PKR') NOT NULL DEFAULT 'AED',
+  `commission_base` VARCHAR(16) NOT NULL DEFAULT 'AED',
   `receipt_prefix` VARCHAR(32) NOT NULL DEFAULT 'REC',
   `order_number_prefix` VARCHAR(32) NOT NULL DEFAULT '109',
   `default_language` ENUM('en', 'ur') NOT NULL DEFAULT 'en',
+  `receipt_header_title_ur` VARCHAR(150) DEFAULT 'رسید آرڈر',
+  `receipt_customer_label_ur` VARCHAR(150) DEFAULT 'مصفح کسٹمر نمبر',
   `receipt_footer_en` TEXT DEFAULT NULL,
   `receipt_footer_ur` TEXT DEFAULT NULL,
   `receipt_footer_cash_jamah_ur` TEXT DEFAULT NULL,
@@ -113,6 +119,8 @@ CREATE TABLE IF NOT EXISTS `station_ledger_entries` (
   `entry_time` VARCHAR(32) DEFAULT NULL,
   `tx_type` ENUM('deposit_topup', 'transfer_payout', 'settlement_repayment', 'adjustment') NOT NULL DEFAULT 'deposit_topup',
   `amount_pkr` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
+  `amount_aed` DECIMAL(16, 2) DEFAULT 0.00,
+  `exchange_rate` DECIMAL(12, 2) DEFAULT 77.50,
   `payment_method` VARCHAR(64) DEFAULT 'Bank Transfer',
   `bank_name` VARCHAR(180) DEFAULT NULL,
   `account_number` VARCHAR(120) DEFAULT NULL,
@@ -124,6 +132,7 @@ CREATE TABLE IF NOT EXISTS `station_ledger_entries` (
   `notes` TEXT DEFAULT NULL,
   `receipt_no` VARCHAR(64) NOT NULL,
   `created_at` VARCHAR(64) DEFAULT NULL,
+  `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_st_ledger_station` (`station_id`),
   KEY `idx_st_ledger_date` (`entry_date`),
@@ -176,7 +185,7 @@ CREATE TABLE IF NOT EXISTS `receivers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- 8. MONEY TRANSFERS (REMITTANCE ORDERS)
+-- 8. MONEY TRANSFERS (REMITTANCE ORDERS WITH MULTI-CURRENCY & CUSTOM DATE)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `money_transfers` (
   `id` VARCHAR(64) NOT NULL,
@@ -199,12 +208,13 @@ CREATE TABLE IF NOT EXISTS `money_transfers` (
   `payout_method` VARCHAR(64) DEFAULT 'Cash',
   `bank_name` VARCHAR(180) DEFAULT NULL,
   `account_number` VARCHAR(120) DEFAULT NULL,
+  `input_currency` VARCHAR(16) NOT NULL DEFAULT 'AED',
   `amount_aed` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   `exchange_rate` DECIMAL(12, 2) NOT NULL DEFAULT 77.50,
   `amount_pkr` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   `commission_type` ENUM('percentage', 'fixed') NOT NULL DEFAULT 'percentage',
   `commission_rate` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
-  `commission_base` ENUM('AED', 'PKR') NOT NULL DEFAULT 'AED',
+  `commission_base` VARCHAR(16) NOT NULL DEFAULT 'AED',
   `commission_amount` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   `additional_charges` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   `total_collected_aed` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
@@ -217,6 +227,7 @@ CREATE TABLE IF NOT EXISTS `money_transfers` (
   `status` ENUM('Draft', 'Received', 'Partially Paid', 'Paid', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Received',
   `notes` TEXT DEFAULT NULL,
   `created_at` VARCHAR(64) DEFAULT NULL,
+  `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_transfers_order_no` (`order_number`),
   KEY `idx_transfers_date` (`transfer_date`),
@@ -253,8 +264,9 @@ CREATE TABLE IF NOT EXISTS `loans` (
   `borrower_phone` VARCHAR(60) NOT NULL,
   `borrower_address` VARCHAR(300) DEFAULT NULL,
   `loan_date` VARCHAR(32) NOT NULL,
+  `initial_amount` DECIMAL(16, 2) DEFAULT 0.00,
   `original_amount` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
-  `currency` ENUM('AED', 'PKR') NOT NULL DEFAULT 'AED',
+  `currency` VARCHAR(16) NOT NULL DEFAULT 'PKR',
   `due_date` VARCHAR(32) NOT NULL,
   `expected_duration` VARCHAR(32) NOT NULL DEFAULT '1_month',
   `purpose` VARCHAR(300) DEFAULT NULL,
@@ -264,24 +276,29 @@ CREATE TABLE IF NOT EXISTS `loans` (
   `status` ENUM('Outstanding', 'Partially Repaid', 'Fully Repaid', 'Overdue', 'Adjusted') NOT NULL DEFAULT 'Outstanding',
   `receipt_no` VARCHAR(64) NOT NULL,
   `notes` TEXT DEFAULT NULL,
+  `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_loans_loan_no` (`loan_no`),
   KEY `idx_loans_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- 11. LOAN REPAYMENTS
+-- 11. LOAN REPAYMENTS & ADDITIONAL KHATA ENTRIES
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `loan_repayments` (
   `id` VARCHAR(64) NOT NULL,
   `loan_id` VARCHAR(64) NOT NULL,
   `repayment_date` VARCHAR(32) NOT NULL,
+  `entry_type` VARCHAR(32) NOT NULL DEFAULT 'repayment',
   `amount` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
-  `currency` ENUM('AED', 'PKR') NOT NULL DEFAULT 'AED',
+  `currency` VARCHAR(16) NOT NULL DEFAULT 'PKR',
   `payment_method` VARCHAR(64) NOT NULL DEFAULT 'Cash',
   `reference_no` VARCHAR(100) DEFAULT NULL,
   `receipt_no` VARCHAR(64) NOT NULL,
+  `previous_balance` DECIMAL(16, 2) DEFAULT 0.00,
+  `new_balance` DECIMAL(16, 2) DEFAULT 0.00,
   `notes` TEXT DEFAULT NULL,
+  `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_repayments_loan` (`loan_id`),
   CONSTRAINT `fk_repayments_loan` FOREIGN KEY (`loan_id`) REFERENCES `loans` (`id`) ON DELETE CASCADE
@@ -297,7 +314,7 @@ CREATE TABLE IF NOT EXISTS `amanat_accounts` (
   `owner_phone` VARCHAR(60) NOT NULL,
   `owner_address` VARCHAR(300) DEFAULT NULL,
   `city` VARCHAR(120) DEFAULT NULL,
-  `currency` ENUM('AED', 'PKR') NOT NULL DEFAULT 'PKR',
+  `currency` VARCHAR(16) NOT NULL DEFAULT 'PKR',
   `opened_date` VARCHAR(32) NOT NULL,
   `current_balance` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   `notes` TEXT DEFAULT NULL,
@@ -314,7 +331,7 @@ CREATE TABLE IF NOT EXISTS `amanat_entries` (
   `entry_date` VARCHAR(32) NOT NULL,
   `entry_type` ENUM('initial_deposit', 'additional_deposit', 'partial_withdrawal', 'full_withdrawal', 'third_party_payment', 'returned_to_owner', 'adjustment') NOT NULL,
   `amount` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
-  `currency` ENUM('AED', 'PKR') NOT NULL DEFAULT 'PKR',
+  `currency` VARCHAR(16) NOT NULL DEFAULT 'PKR',
   `description` TEXT NOT NULL,
   `related_person` VARCHAR(180) DEFAULT NULL,
   `previous_balance` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
@@ -323,6 +340,7 @@ CREATE TABLE IF NOT EXISTS `amanat_entries` (
   `payment_method` VARCHAR(64) DEFAULT 'Cash',
   `bank_name` VARCHAR(180) DEFAULT NULL,
   `notes` TEXT DEFAULT NULL,
+  `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_amanat_entries_account` (`account_id`),
   CONSTRAINT `fk_amanat_entries_account` FOREIGN KEY (`account_id`) REFERENCES `amanat_accounts` (`id`) ON DELETE CASCADE
@@ -337,12 +355,13 @@ CREATE TABLE IF NOT EXISTS `cash_ledger` (
   `entry_type` ENUM('cash_in', 'cash_out') NOT NULL,
   `category` VARCHAR(64) NOT NULL,
   `amount` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
-  `currency` ENUM('AED', 'PKR') NOT NULL DEFAULT 'PKR',
+  `currency` VARCHAR(16) NOT NULL DEFAULT 'PKR',
   `reference_id` VARCHAR(100) DEFAULT NULL,
   `party_name` VARCHAR(180) DEFAULT NULL,
   `payment_method` VARCHAR(64) NOT NULL DEFAULT 'Cash',
   `description` TEXT NOT NULL,
   `notes` TEXT DEFAULT NULL,
+  `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_cash_ledger_date` (`entry_date`),
   KEY `idx_cash_ledger_type` (`entry_type`)
@@ -384,7 +403,7 @@ VALUES
     'admin',
     'all',
     'active',
-    '{"canEditExchangeRate":false,"canManageStations":true,"canDeleteTransfers":true,"canViewReports":true,"canManageCustomers":true,"canManageKhata":true,"canManageAmanat":true,"canManageUsers":false}',
+    '{"canEditExchangeRate":false,"canManageStations":true,"canDeleteTransfers":false,"canViewReports":true,"canManageCustomers":true,"canManageKhata":true,"canManageAmanat":true,"canManageUsers":false}',
     NOW()
   )
 ON DUPLICATE KEY UPDATE
@@ -405,6 +424,8 @@ INSERT INTO `business_settings` (
   `whatsapp`,
   `email`,
   `default_exchange_rate`,
+  `default_transfer_currency`,
+  `currencies_json`,
   `default_commission_pct`,
   `commission_base`,
   `receipt_prefix`,
@@ -425,6 +446,8 @@ INSERT INTO `business_settings` (
   '+971501234567',
   'info@eaglestarbrand.com',
   77.50,
+  'AED',
+  '[{"code":"AED","nameEn":"UAE Dirham (AED)","nameUr":"درہم (AED)","symbol":"AED","rateToPKR":77.5},{"code":"PKR","nameEn":"Pakistani Rupees (PKR)","nameUr":"پاکستانی روپے (PKR)","symbol":"PKR","rateToPKR":1},{"code":"SAR","nameEn":"Saudi Riyal (SAR)","nameUr":"سعودی ریال (SAR)","symbol":"SAR","rateToPKR":74.2},{"code":"USD","nameEn":"US Dollar (USD)","nameUr":"امریکی ڈالر (USD)","symbol":"USD","rateToPKR":278.5},{"code":"OMR","nameEn":"Omani Rial (OMR)","nameUr":"عمانی ریال (OMR)","symbol":"OMR","rateToPKR":722},{"code":"GBP","nameEn":"British Pound (GBP)","nameUr":"برطانوی پاؤنڈ (GBP)","symbol":"GBP","rateToPKR":355}]',
   1.00,
   'AED',
   'REC',
@@ -435,6 +458,8 @@ INSERT INTO `business_settings` (
 )
 ON DUPLICATE KEY UPDATE
   `business_name_en` = VALUES(`business_name_en`),
-  `business_name_ur` = VALUES(`business_name_ur`);
+  `business_name_ur` = VALUES(`business_name_ur`),
+  `default_transfer_currency` = VALUES(`default_transfer_currency`),
+  `currencies_json` = VALUES(`currencies_json`);
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -1473,7 +1473,7 @@ export const SettingsView: React.FC = () => {
                     type="text"
                     value={formData.businessNameUr}
                     onChange={e => handleChange('businessNameUr', e.target.value)}
-                    placeholder="ایگل اسٹار برانڈ"
+                    placeholder="ایگل ایس بی"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-urdu-heading font-bold text-slate-950"
                     dir="rtl"
                   />

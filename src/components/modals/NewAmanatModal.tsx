@@ -359,13 +359,6 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
 
     const isDeposit = entryType === 'additional_deposit' || entryType === 'initial_deposit';
 
-    if (!isDeposit && amountNum > targetAccount.currentBalance) {
-      setEntryError(
-        `واپسی رقم موجودہ کھاتہ بیلنس (${targetAccount.currentBalance.toLocaleString()} ${targetAccount.currency}) سے زیادہ نہیں ہو سکتی`
-      );
-      return;
-    }
-
     const resolvedEntryBank =
       paymentMethod === 'Bank Transfer'
         ? bankName === 'Other Bank'
@@ -376,7 +369,7 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
         : paymentMethod;
 
     const prevBal = targetAccount.currentBalance;
-    const newBal = isDeposit ? prevBal + amountNum : Math.max(0, prevBal - amountNum);
+    const newBal = isDeposit ? prevBal + amountNum : prevBal - amountNum;
     const receiptNo = `REC-${Math.floor(10000 + Math.random() * 90000)}`;
 
     const defaultDesc = isDeposit
@@ -449,7 +442,7 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
   const previewPrevBal = targetAccount?.currentBalance || 0;
   const previewNewBal = isDepositMode
     ? previewPrevBal + parsedEntryAmount
-    : Math.max(0, previewPrevBal - parsedEntryAmount);
+    : previewPrevBal - parsedEntryAmount;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
@@ -745,8 +738,15 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
                             ({targetAccount.accountNo})
                           </span>
                         </div>
-                        <span className="px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 font-mono font-bold text-xs">
-                          موجودہ بقایا: {targetAccount.currentBalance.toLocaleString()} {targetAccount.currency}
+                        <span
+                          className={`px-2.5 py-0.5 rounded-lg font-mono font-bold text-xs ${
+                            targetAccount.currentBalance < 0
+                              ? 'bg-rose-100 text-rose-900'
+                              : 'bg-emerald-100 text-emerald-900'
+                          }`}
+                        >
+                          {targetAccount.currentBalance < 0 ? 'منفی بقایا (واجب الادا): ' : 'موجودہ جمع بقایا: '}
+                          {targetAccount.currentBalance.toLocaleString()} {targetAccount.currency}
                         </span>
                       </div>
                     ) : (
@@ -789,7 +789,11 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
                                 {acc.accountNo} • {acc.ownerPhone}
                               </p>
                             </div>
-                            <span className="font-mono font-bold text-emerald-700">
+                            <span
+                              className={`font-mono font-bold ${
+                                acc.currentBalance < 0 ? 'text-rose-700' : 'text-emerald-700'
+                              }`}
+                            >
                               {acc.currentBalance.toLocaleString()} {acc.currency}
                             </span>
                           </button>
@@ -823,6 +827,15 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
                           className="text-[11px] font-bold text-rose-700 hover:underline font-urdu-body cursor-pointer"
                         >
                           مکمل بقایا ({targetAccount.currentBalance.toLocaleString()})
+                        </button>
+                      )}
+                      {isDepositMode && targetAccount && targetAccount.currentBalance < 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleEntryAmountChange(String(Math.abs(targetAccount.currentBalance)))}
+                          className="text-[11px] font-bold text-emerald-700 hover:underline font-urdu-body cursor-pointer"
+                        >
+                          منفی بقایا پورا کریں ({Math.abs(targetAccount.currentBalance).toLocaleString()})
                         </button>
                       )}
                     </div>
@@ -966,38 +979,72 @@ export const NewAmanatModal: React.FC<NewAmanatModalProps> = ({
 
                 {/* Individual Khata Running Balance Preview */}
                 {targetAccount && (
-                  <div className="bg-white rounded-xl p-3 border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-600 font-bold block font-urdu-heading">
-                        سابقہ کھاتہ بقایا (Previous Balance):
-                      </span>
-                      <span className="font-mono font-bold text-sm text-slate-800">
-                        {previewPrevBal.toLocaleString()} {targetAccount.currency}
-                      </span>
+                  <div className="bg-white rounded-xl p-3 border border-slate-200 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <span className="text-slate-600 font-bold block font-urdu-heading">
+                          سابقہ کھاتہ بقایا (Previous Balance):
+                        </span>
+                        <span
+                          className={`font-mono font-bold text-sm ${
+                            previewPrevBal < 0 ? 'text-rose-700' : 'text-slate-800'
+                          }`}
+                        >
+                          {previewPrevBal.toLocaleString()} {targetAccount.currency}{' '}
+                          <span className="text-[11px] font-urdu-body">
+                            ({previewPrevBal < 0 ? 'منفی / واجب الادا' : previewPrevBal > 0 ? 'جمع' : 'صفر'})
+                          </span>
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-600 font-bold block font-urdu-heading">
+                          {isDepositMode
+                            ? 'موجودہ جمع رقم (+):'
+                            : 'موجودہ واپسی رقم (-):'}
+                        </span>
+                        <span
+                          className={`font-mono font-bold text-sm ${
+                            isDepositMode ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {isDepositMode ? '+' : '-'}
+                          {parsedEntryAmount.toLocaleString()} {targetAccount.currency}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-600 font-bold block font-urdu-heading">
+                          نیا صافی کھاتہ بقایا (New Balance):
+                        </span>
+                        <span
+                          className={`font-mono font-black text-base ${
+                            previewNewBal < 0
+                              ? 'text-rose-700'
+                              : previewNewBal > 0
+                              ? 'text-emerald-700'
+                              : 'text-slate-950'
+                          }`}
+                        >
+                          {previewNewBal.toLocaleString()} {targetAccount.currency}{' '}
+                          <span className="text-xs font-bold font-urdu-body">
+                            ({previewNewBal < 0 ? 'منفی / واجب الادا' : previewNewBal > 0 ? 'جمع بیلنس' : 'بے باق'})
+                          </span>
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-slate-600 font-bold block font-urdu-heading">
-                        {isDepositMode
-                          ? 'موجودہ جمع رقم (+):'
-                          : 'موجودہ واپسی رقم (-):'}
-                      </span>
-                      <span
-                        className={`font-mono font-bold text-sm ${
-                          isDepositMode ? 'text-emerald-600' : 'text-rose-600'
-                        }`}
-                      >
-                        {isDepositMode ? '+' : '-'}
-                        {parsedEntryAmount.toLocaleString()} {targetAccount.currency}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-600 font-bold block font-urdu-heading">
-                        نیا صافی کھاتہ بقایا (New Balance):
-                      </span>
-                      <span className="font-mono font-black text-base text-slate-950">
-                        {previewNewBal.toLocaleString()} {targetAccount.currency}
-                      </span>
-                    </div>
+
+                    {isDepositMode && previewPrevBal < 0 && parsedEntryAmount > 0 && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 text-[11px] font-bold text-emerald-900 font-urdu-body">
+                        {previewNewBal >= 0
+                          ? `خودکار سیٹلمنٹ: سابقہ منفی بقایا (${Math.abs(previewPrevBal).toLocaleString()} ${targetAccount.currency}) منہا ہونے کے بعد ${previewNewBal.toLocaleString()} ${targetAccount.currency} جمع کھاتہ میں شامل ہو جائے گا۔`
+                          : `خودکار سیٹلمنٹ: جمع رقم (${parsedEntryAmount.toLocaleString()} ${targetAccount.currency}) سابقہ منفی بقایا سے منہا ہو کر بقایا واجب الادا ${previewNewBal.toLocaleString()} ${targetAccount.currency} رہ جائے گا۔`}
+                      </div>
+                    )}
+
+                    {isWithdrawMode && previewNewBal < 0 && parsedEntryAmount > 0 && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-1.5 text-[11px] font-bold text-rose-900 font-urdu-body">
+                        نوٹ: جمع بیلنس سے زیادہ واپسی پر کھاتہ منفی ({previewNewBal.toLocaleString()} {targetAccount.currency}) ہو جائے گا — آئندہ رقم جمع کرنے پر یہ منفی خودکار منہا ہو جائے گا۔
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -149,6 +149,7 @@ export const translations: Record<Language, Record<string, string>> = {
     statusFullyRepaid: 'Fully Repaid',
     statusOverdue: 'Overdue',
     statusAdjusted: 'Adjusted',
+    statusCreditBalance: 'Extra Deposit (Credit)',
 
     // Order Register (The user uploaded sheet: آرڈر لسٹ مصفح)
     orderListMusaffah: 'Order List Musaffah (آرڈر لسٹ مصفح)',
@@ -269,6 +270,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'Fully Repaid': 'Fully Repaid',
     'Overdue': 'Overdue',
     'Adjusted': 'Adjusted',
+    'Credit Balance': 'Extra Deposit (Credit)',
     'Draft': 'Draft',
     'Received': 'Received',
     'Partially Paid': 'Partially Paid',
@@ -333,7 +335,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
   ur: {
     // App & Nav
-    appName: 'ایگل اسٹار برانڈ',
+    appName: 'ایگل ایس بی',
     appTagline: 'منی ٹرانسفر، پیسہ جمع، ادھار اور رسیدوں کا مکمل نظام',
     dashboard: 'مرکزی ڈیش بورڈ',
     moneyTransfers: 'رقم بھیجیں (ٹرانسفر)',
@@ -474,6 +476,7 @@ export const translations: Record<Language, Record<string, string>> = {
     statusFullyRepaid: 'مکمل واپس شدہ',
     statusOverdue: 'معیاد ختم (اوور ڈیو)',
     statusAdjusted: 'حساب درست شدہ',
+    statusCreditBalance: 'اضافی جمع (کریڈٹ بیلنس)',
 
     // Order Register (The user uploaded sheet: آرڈر لسٹ مصفح)
     orderListMusaffah: 'آرڈر لسٹ مصفح',
@@ -594,6 +597,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'Fully Repaid': 'مکمل واپس شدہ',
     'Overdue': 'معیاد ختم (اوور ڈیو)',
     'Adjusted': 'حساب درست شدہ',
+    'Credit Balance': 'اضافی جمع (کریڈٹ)',
     'Draft': 'مسودہ',
     'Received': 'وصول شدہ',
     'Partially Paid': 'جزوی ادا شدہ',

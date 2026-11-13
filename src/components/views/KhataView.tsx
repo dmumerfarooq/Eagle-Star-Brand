@@ -73,6 +73,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
   // Inline repayment edit state inside the modal
   const [editingRepaymentId, setEditingRepaymentId] = useState<string | null>(null);
   const [repEditDate, setRepEditDate] = useState('');
+  const [repEditType, setRepEditType] = useState<'repayment' | 'additional_loan'>('repayment');
   const [repEditAmount, setRepEditAmount] = useState('');
   const [repEditNotes, setRepEditNotes] = useState('');
 
@@ -114,6 +115,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
   const startEditRepayment = (rep: LoanRepayment) => {
     setEditingRepaymentId(rep.id);
     setRepEditDate(rep.date);
+    setRepEditType(rep.entryType || 'repayment');
     setRepEditAmount(String(rep.amount));
     setRepEditNotes(rep.notes || '');
   };
@@ -123,6 +125,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
     const amt = Math.max(0, Number(repEditAmount) || 0);
     updateLoanRepayment(editingLoan.id, rep.id, {
       date: repEditDate || rep.date,
+      entryType: repEditType,
       amount: amt,
       notes: repEditNotes.trim()
     });
@@ -165,7 +168,11 @@ export const KhataView: React.FC<KhataViewProps> = ({
 
   const totalLent = filteredLoans.reduce((s, l) => s + l.originalAmount, 0);
   const totalRepaid = filteredLoans.reduce((s, l) => s + l.totalRepaid, 0);
-  const totalOutstanding = filteredLoans.reduce((s, l) => s + l.remainingBalance, 0);
+  const totalOutstanding = filteredLoans.reduce((s, l) => s + Math.max(0, l.remainingBalance), 0);
+  const totalExtraCredit = filteredLoans.reduce(
+    (s, l) => s + (l.remainingBalance < 0 ? Math.abs(l.remainingBalance) : 0),
+    0
+  );
 
   const handleDelete = (id: string) => {
     if (!isSuperAdmin) return;
@@ -261,7 +268,13 @@ export const KhataView: React.FC<KhataViewProps> = ({
             {formatMoney(totalOutstanding, 'PKR')}
           </div>
           <span className="text-xs text-rose-900 font-bold block">
-            {language === 'ur' ? 'واجب الوصول بقایا رقم' : 'Net Receivable Balance'}
+            {totalExtraCredit > 0
+              ? language === 'ur'
+                ? `واجب الوصول بقایا | اضافی جمع (کریڈٹ): +${totalExtraCredit.toLocaleString()}`
+                : `Receivable | Extra Credit Held: +${totalExtraCredit.toLocaleString()}`
+              : language === 'ur'
+              ? 'واجب الوصول بقایا رقم'
+              : 'Net Receivable Balance'}
           </span>
         </div>
       </div>
@@ -288,6 +301,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
             >
               <option value="all">{t('all')} {t('status')}</option>
               <option value="Outstanding">{t('statusOutstanding')}</option>
+              <option value="Credit Balance">{t('statusCreditBalance')}</option>
               <option value="Fully Repaid">{t('statusFullyRepaid')}</option>
               <option value="Overdue">{t('statusOverdue')}</option>
             </select>
@@ -416,13 +430,32 @@ export const KhataView: React.FC<KhataViewProps> = ({
                     <td className="py-3.5 px-4 font-mono font-extrabold text-emerald-900">
                       {formatMoney(loan.totalRepaid, loan.currency)}
                     </td>
-                    <td className="py-3.5 px-4 font-mono font-black text-rose-900">
-                      {formatMoney(loan.remainingBalance, loan.currency)}
+                    <td
+                      className={`py-3.5 px-4 font-mono font-black ${
+                        loan.remainingBalance < 0
+                          ? 'text-emerald-700'
+                          : loan.remainingBalance === 0
+                          ? 'text-slate-700'
+                          : 'text-rose-900'
+                      }`}
+                    >
+                      {loan.remainingBalance < 0 ? (
+                        <>
+                          +{formatMoney(Math.abs(loan.remainingBalance), loan.currency)}
+                          <span className="block text-[10px] font-bold font-urdu-body text-emerald-800">
+                            {language === 'ur' ? 'اضافی جمع (کریڈٹ)' : 'Extra Deposit Credit'}
+                          </span>
+                        </>
+                      ) : (
+                        formatMoney(loan.remainingBalance, loan.currency)
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       <span
                         className={`inline-block px-2.5 py-0.5 rounded-md text-xs font-bold font-urdu-heading ${
-                          loan.status === 'Fully Repaid'
+                          loan.status === 'Credit Balance'
+                            ? 'bg-teal-100 text-teal-950 border border-teal-300'
+                            : loan.status === 'Fully Repaid'
                             ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
                             : loan.status === 'Overdue'
                             ? 'bg-rose-100 text-rose-950 border border-rose-300'
@@ -436,6 +469,13 @@ export const KhataView: React.FC<KhataViewProps> = ({
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => openReceipt({ format: 'K', loan })}
+                          className="p-1.5 text-slate-800 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                          title={language === 'ur' ? 'مکمل کھاتہ اسٹیٹمنٹ پرنٹ کریں' : 'Print Individual Statement'}
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => openReceipt({ format: 'A', loan })}
                           className="p-1.5 text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
@@ -627,7 +667,7 @@ export const KhataView: React.FC<KhataViewProps> = ({
                       return (
                         <div key={rep.id} className="p-3 bg-white hover:bg-slate-50 transition">
                           {isEditingThis ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 items-end">
                               <div>
                                 <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
                                   {t('date')}
@@ -638,6 +678,25 @@ export const KhataView: React.FC<KhataViewProps> = ({
                                   onChange={e => setRepEditDate(e.target.value)}
                                   className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-mono"
                                 />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
+                                  {language === 'ur' ? 'قسم' : 'Type'}
+                                </label>
+                                <select
+                                  value={repEditType}
+                                  onChange={e =>
+                                    setRepEditType(e.target.value as 'repayment' | 'additional_loan')
+                                  }
+                                  className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-bold"
+                                >
+                                  <option value="repayment">
+                                    {language === 'ur' ? '- واپسی / جمع' : '- Return / Deposit'}
+                                  </option>
+                                  <option value="additional_loan">
+                                    {language === 'ur' ? '+ مزید قرض' : '+ Take More'}
+                                  </option>
+                                </select>
                               </div>
                               <div>
                                 <label className="block text-[11px] font-bold text-slate-600 mb-0.5">
@@ -705,16 +764,29 @@ export const KhataView: React.FC<KhataViewProps> = ({
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
-                                <span
-                                  className={`font-mono font-extrabold ${
-                                    rep.entryType === 'additional_loan'
-                                      ? 'text-rose-700'
-                                      : 'text-emerald-700'
-                                  }`}
-                                >
-                                  {rep.entryType === 'additional_loan' ? '+' : '-'}
-                                  {formatMoney(rep.amount, editingLoan.currency)}
-                                </span>
+                                <div className="text-end">
+                                  <span
+                                    className={`font-mono font-extrabold block ${
+                                      rep.entryType === 'additional_loan'
+                                        ? 'text-rose-700'
+                                        : 'text-emerald-700'
+                                    }`}
+                                  >
+                                    {rep.entryType === 'additional_loan' ? '+' : '-'}
+                                    {formatMoney(rep.amount, editingLoan.currency)}
+                                  </span>
+                                  {rep.newBalance !== undefined && (
+                                    <span
+                                      className={`text-[10px] font-mono font-bold block ${
+                                        rep.newBalance < 0 ? 'text-emerald-700' : 'text-slate-500'
+                                      }`}
+                                    >
+                                      {rep.newBalance < 0
+                                        ? `جمع: +${Math.abs(rep.newBalance).toLocaleString()}`
+                                        : `بقایا: ${rep.newBalance.toLocaleString()}`}
+                                    </span>
+                                  )}
+                                </div>
                                 <button
                                   onClick={() =>
                                     openReceipt({
@@ -785,6 +857,14 @@ export const KhataView: React.FC<KhataViewProps> = ({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openReceipt({ format: 'K', loan: editingLoan })}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'ur' ? 'اسٹیٹمنٹ پرنٹ' : 'Print Statement'}</span>
+                </button>
                 <button
                   onClick={() => setEditingLoanId(null)}
                   className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"

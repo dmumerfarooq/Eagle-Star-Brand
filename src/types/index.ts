@@ -9,7 +9,7 @@ export type Currency = 'AED' | 'PKR';
 
 export type TransferStatus = 'Draft' | 'Received' | 'Partially Paid' | 'Paid' | 'Completed' | 'Cancelled';
 
-export type LoanStatus = 'Outstanding' | 'Partially Repaid' | 'Fully Repaid' | 'Overdue' | 'Adjusted';
+export type LoanStatus = 'Outstanding' | 'Partially Repaid' | 'Fully Repaid' | 'Overdue' | 'Adjusted' | 'Credit Balance';
 
 export type AmanatEntryType = 
   | 'initial_deposit'

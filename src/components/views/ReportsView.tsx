@@ -188,7 +188,7 @@ export const ReportsView: React.FC = () => {
   const khataSummary = useMemo(() => {
     const totalLent = filteredLoans.reduce((s, l) => s + l.originalAmount, 0);
     const totalRepaid = filteredLoans.reduce((s, l) => s + l.totalRepaid, 0);
-    const totalOutstanding = filteredLoans.reduce((s, l) => s + l.remainingBalance, 0);
+    const totalOutstanding = filteredLoans.reduce((s, l) => s + Math.max(0, l.remainingBalance), 0);
     const activeCount = filteredLoans.filter(l => l.status === 'Outstanding' || l.status === 'Partially Repaid').length;
     const overdueCount = filteredLoans.filter(l => l.status === 'Overdue').length;
     const paidCount = filteredLoans.filter(l => l.status === 'Fully Repaid').length;
@@ -908,20 +908,34 @@ export const ReportsView: React.FC = () => {
                       <td className="p-3 text-right font-mono font-semibold text-emerald-700">
                         {formatMoney(l.totalRepaid, l.currency)}
                       </td>
-                      <td className="p-3 text-right font-mono font-extrabold text-rose-700">
-                        {formatMoney(l.remainingBalance, l.currency)}
+                      <td
+                        className={`p-3 text-right font-mono font-extrabold ${
+                          l.remainingBalance < 0
+                            ? 'text-emerald-700'
+                            : l.remainingBalance === 0
+                            ? 'text-slate-600'
+                            : 'text-rose-700'
+                        }`}
+                      >
+                        {l.remainingBalance < 0
+                          ? `+${formatMoney(Math.abs(l.remainingBalance), l.currency)} (${language === 'ur' ? 'جمع' : 'Credit'})`
+                          : formatMoney(l.remainingBalance, l.currency)}
                       </td>
                       <td className="p-3 text-center whitespace-nowrap">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            l.status === 'Fully Repaid'
+                            l.status === 'Credit Balance'
+                              ? 'bg-teal-100 text-teal-900'
+                              : l.status === 'Fully Repaid'
                               ? 'bg-emerald-100 text-emerald-800'
                               : l.status === 'Overdue'
                               ? 'bg-rose-100 text-rose-800'
                               : 'bg-amber-100 text-amber-800'
                           }`}
                         >
-                          {l.status === 'Fully Repaid'
+                          {l.status === 'Credit Balance'
+                            ? (language === 'ur' ? 'اضافی جمع' : 'Credit Balance')
+                            : l.status === 'Fully Repaid'
                             ? (language === 'ur' ? 'ادا شدہ' : 'Fully Repaid')
                             : l.status === 'Overdue'
                             ? (language === 'ur' ? 'واجب الادا' : 'Overdue')
@@ -931,7 +945,7 @@ export const ReportsView: React.FC = () => {
                       <td className="p-3 text-center">
                         <div className="inline-flex items-center gap-1">
                           <button
-                            onClick={() => openReceipt({ loan: l, format: 'A' })}
+                            onClick={() => openReceipt({ loan: l, format: 'K' })}
                             className="inline-flex items-center gap-1 text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 px-2 py-1 rounded transition cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />

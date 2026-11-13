@@ -40,7 +40,7 @@ export type NavScreen =
 
 export type ReceiptModalState = {
   isOpen: boolean;
-  format: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'DEP' | 'I' | 'J';
+  format: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'DEP' | 'I' | 'J' | 'K';
   transfer?: MoneyTransfer;
   payout?: Payout;
   loan?: Loan;
@@ -434,7 +434,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     document.documentElement.setAttribute('dir', language === 'ur' ? 'rtl' : 'ltr');
     const brandTitle =
       language === 'ur'
-        ? settings.businessNameUr || 'ایگل اسٹار برانڈ'
+        ? settings.businessNameUr || 'ایگل ایس بی'
         : settings.businessNameEn || 'Eagle Star Brand';
     document.title = `${brandTitle} - Money Transfer & Khata Ledger`;
   }, [language, settings.businessNameEn, settings.businessNameUr]);
@@ -552,8 +552,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (repayment.entryType === 'additional_loan') {
         showToast(
           language === 'ur'
-            ? 'مزید قرض شامل ہو گیا اور بقایا کھاتہ اپ ڈیٹ کر دیا گیا!'
+            ? updated.remainingBalance < 0
+              ? `مزید قرض شامل ہو گیا — بقایا جمع رقم: +${Math.abs(updated.remainingBalance).toLocaleString()} ${updated.currency}`
+              : 'مزید قرض شامل ہو گیا اور بقایا کھاتہ اپ ڈیٹ کر دیا گیا!'
             : 'Additional loan recorded and balance updated!',
+          'success'
+        );
+      } else if (updated.remainingBalance < 0) {
+        showToast(
+          language === 'ur'
+            ? `واپسی رقم وصول اور اضافی ${Math.abs(updated.remainingBalance).toLocaleString()} ${updated.currency} بطور جمع (Deposit) محفوظ ہو گئے!`
+            : `Repayment recorded! Extra ${Math.abs(updated.remainingBalance).toLocaleString()} ${updated.currency} saved as deposit credit.`,
           'success'
         );
       } else {

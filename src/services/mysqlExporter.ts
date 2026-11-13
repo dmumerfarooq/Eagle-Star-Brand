@@ -50,7 +50,7 @@ export function generateMySQLDump(snapshot: FullAppStateSnapshot): string {
   const nowIso = new Date().toISOString();
 
   lines.push('-- ============================================================================');
-  lines.push('-- EAGLE STAR BRAND (ایگل اسٹار برانڈ) - COMPLETE MYSQL DATABASE DUMP');
+  lines.push('-- EAGLE STAR BRAND (ایگل ایس بی) - COMPLETE MYSQL DATABASE DUMP');
   lines.push(`-- Generated At: ${nowIso}`);
   lines.push('-- Target Engine: MySQL 8.0+ / MariaDB 10.5+ (UTF8MB4 Urdu & English)');
   lines.push('-- Supports Multi-Currency (PKR, AED, SAR, USD, OMR, GBP & Custom Currencies),');
@@ -82,7 +82,7 @@ export function generateMySQLDump(snapshot: FullAppStateSnapshot): string {
   lines.push(`CREATE TABLE IF NOT EXISTS \`business_settings\` (
   \`id\` INT NOT NULL DEFAULT 1,
   \`business_name_en\` VARCHAR(200) NOT NULL DEFAULT 'Eagle Star Brand',
-  \`business_name_ur\` VARCHAR(200) NOT NULL DEFAULT 'ایگل اسٹار برانڈ',
+  \`business_name_ur\` VARCHAR(200) NOT NULL DEFAULT 'ایگل ایس بی',
   \`branch_en\` VARCHAR(200) DEFAULT NULL,
   \`branch_ur\` VARCHAR(200) DEFAULT NULL,
   \`address_en\` VARCHAR(300) DEFAULT NULL,

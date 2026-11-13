@@ -419,7 +419,7 @@ export const LoginView: React.FC = () => {
                   className="font-brand-urdu text-lg sm:text-xl font-black text-slate-950 -mt-0.5"
                   dir="rtl"
                 >
-                  ایگل اسٹار برانڈ
+                  ایگل ایس بی
                 </p>
 
                 <p className="text-xs text-slate-600 font-bold mt-1 uppercase tracking-wider font-mono">
@@ -549,7 +549,7 @@ export const LoginView: React.FC = () => {
 
       {/* Page Footer */}
       <footer className="relative z-10 text-center text-xs text-slate-600 py-3 font-semibold border-t border-slate-200/80 max-w-7xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p>© {new Date().getFullYear()} Eagle Star Brand (ایگل اسٹار برانڈ). All Rights Reserved.</p>
+        <p>© {new Date().getFullYear()} Eagle Star Brand (ایگل ایس بی). All Rights Reserved.</p>
         <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600">
           <span>Designed & Developed by </span>
           <strong className="text-slate-800 font-bold">Burraq Digits</strong>

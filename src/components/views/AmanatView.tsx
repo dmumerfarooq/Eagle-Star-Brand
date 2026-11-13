@@ -394,7 +394,13 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-950 text-sm">{acc.ownerName}</span>
-                    <span className="font-mono text-xs font-bold text-emerald-950 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                    <span
+                      className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${
+                        acc.currentBalance < 0
+                          ? 'text-rose-950 bg-rose-100 border-rose-200'
+                          : 'text-emerald-950 bg-emerald-100 border-emerald-200'
+                      }`}
+                    >
                       {acc.currentBalance.toLocaleString()} {acc.currency}
                     </span>
                   </div>
@@ -497,13 +503,36 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
               </div>
 
               {/* Current Balance Bar */}
-              <div className="p-4 bg-slate-100 border-b border-slate-200 text-slate-950 flex flex-wrap items-center justify-between gap-4">
+              <div
+                className={`p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 ${
+                  selectedAccount.currentBalance < 0 ? 'bg-rose-50/70 text-rose-950' : 'bg-slate-100 text-slate-950'
+                }`}
+              >
                 <div>
                   <span className="text-xs text-slate-800 font-bold uppercase tracking-wider block">
-                    {language === 'ur' ? 'موجودہ پیسہ جمع بقایا رقم' : 'Current Cash Jamah Balance'}
+                    {selectedAccount.currentBalance < 0
+                      ? language === 'ur'
+                        ? 'موجودہ منفی کھاتہ بقایا (واجب الادا)'
+                        : 'Current Negative Balance (Due)'
+                      : language === 'ur'
+                      ? 'موجودہ پیسہ جمع بقایا رقم'
+                      : 'Current Cash Jamah Balance'}
                   </span>
-                  <div className="text-2xl sm:text-3xl font-black font-mono text-slate-950 mt-0.5">
-                    {selectedAccount.currentBalance.toLocaleString()} {selectedAccount.currency}
+                  <div
+                    className={`text-2xl sm:text-3xl font-black font-mono mt-0.5 flex items-baseline gap-2 ${
+                      selectedAccount.currentBalance < 0 ? 'text-rose-700' : 'text-slate-950'
+                    }`}
+                  >
+                    <span>
+                      {selectedAccount.currentBalance.toLocaleString()} {selectedAccount.currency}
+                    </span>
+                    <span className="text-xs font-bold font-urdu-heading px-2 py-0.5 rounded border bg-white/80">
+                      {selectedAccount.currentBalance < 0
+                        ? 'منفی (واجب الادا)'
+                        : selectedAccount.currentBalance > 0
+                        ? 'جمع (قابل واپسی)'
+                        : 'بے باق (صفر)'}
+                    </span>
                   </div>
                 </div>
                 <div className="text-xs text-slate-700 font-mono text-end font-semibold">
@@ -660,8 +689,19 @@ export const AmanatView: React.FC<AmanatViewProps> = ({ onOpenNewAmanat }) => {
                               {isDep ? '+' : '-'}
                               {formatMoney(entry.amount, entry.currency)}
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-extrabold text-slate-950">
+                            <td
+                              className={`py-2.5 px-3 font-mono font-extrabold ${
+                                entry.newBalance < 0 ? 'text-rose-700' : 'text-slate-950'
+                              }`}
+                            >
                               {formatMoney(entry.newBalance, entry.currency)}
+                              <span className="block text-[10px] font-bold font-urdu-body">
+                                {entry.newBalance < 0
+                                  ? 'منفی (واجب الادا)'
+                                  : entry.newBalance > 0
+                                  ? 'جمع بیلنس'
+                                  : 'بے باق'}
+                              </span>
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <div className="flex items-center justify-center gap-1">

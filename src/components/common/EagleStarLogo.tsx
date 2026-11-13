@@ -39,7 +39,7 @@ export const EagleStarLogo: React.FC<EagleStarLogoProps> = ({
       : settings?.customLogoUrl || defaultLogoSrc;
 
   const brandNameEn = customNameEn || settings?.businessNameEn || 'Eagle Star Brand';
-  const brandNameUr = customNameUr || settings?.businessNameUr || 'ایگل اسٹار برانڈ';
+  const brandNameUr = customNameUr || settings?.businessNameUr || 'ایگل ایس بی';
   const subtitleText =
     customSubtitle ||
     settings?.branchEn ||

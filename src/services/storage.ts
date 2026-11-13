@@ -73,7 +73,7 @@ export const defaultCurrencies: CurrencyConfig[] = [
 
 export const defaultSettings: BusinessSettings = {
   businessNameEn: 'Eagle Star Brand',
-  businessNameUr: 'ایگل اسٹار برانڈ',
+  businessNameUr: 'ایگل ایس بی',
   branchEn: 'Deira Branch, Dubai, UAE',
   branchUr: 'دیرہ برانچ، دبئی، متحدہ عرب امارات',
   addressEn: 'Shop 14, Al-Sabkha Road, Deira, Dubai',
@@ -94,11 +94,11 @@ export const defaultSettings: BusinessSettings = {
   defaultLanguage: 'en',
   receiptFooterEn: 'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔',
   receiptFooterUr: 'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔',
-  receiptFooterCashJamahUr: 'ایگل اسٹار برانڈ - پیسہ جمع و تحویل میں رکھی گئی رقم بوقت ضرورت فوری قابل واپسی ہے۔',
-  receiptFooterCashJamahEn: 'Thank you for trusting Eagle Star Brand Cash Jamah Safekeeping. Funds available on demand.',
-  receiptFooterDepositUr: 'ایگل اسٹار برانڈ - کیش جمع شدگی و کاؤنٹر فنڈز ڈپازٹ رسید۔ آپ کے اعتماد کا شکریہ!',
+  receiptFooterCashJamahUr: 'ایگل ایس بی کیش جمع پر آپ کے اعتماد کا شکریہ۔ رقم بوقتِ ضرورت دستیاب ہے۔',
+  receiptFooterCashJamahEn: '',
+  receiptFooterDepositUr: 'ایگل ایس بی - کیش جمع شدگی و کاؤنٹر فنڈز ڈپازٹ رسید۔ آپ کے اعتماد کا شکریہ!',
   receiptFooterDepositEn: 'Thank you for your trust in Eagle Star Brand - Official Cash Deposit Receipt',
-  receiptFooterLoanUr: 'ایگل اسٹار برانڈ - ادھار کھاتہ و قرضہ واپسی باقاعدگی سے ادا کریں۔ آپ کے تعاون کا شکریہ!',
+  receiptFooterLoanUr: 'ایگل ایس بی - ادھار کھاتہ و قرضہ واپسی باقاعدگی سے ادا کریں۔ آپ کے تعاون کا شکریہ!',
   receiptFooterLoanEn: 'Eagle Star Brand - Please settle credit khata dues on agreed due date. Thank you.',
   receiptHeaderTitleUr: 'رسید آرڈر',
   receiptCustomerLabelUr: 'مصفح کسٹمر نمبر'
@@ -1287,8 +1287,9 @@ class StorageService {
     if (!entries || entries.length === 0) {
       return { entries: [], currentBalance: 0 };
     }
+    const sortedEntries = [...entries].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     let runningBal = 0;
-    const recalculated = entries.map(e => {
+    const recalculated = sortedEntries.map(e => {
       const prevBal = runningBal;
       const isDeposit = e.type === 'initial_deposit' || e.type === 'additional_deposit';
       const newBal = isDeposit ? prevBal + (e.amount || 0) : prevBal - (e.amount || 0);
@@ -1794,7 +1795,9 @@ class StorageService {
 
   // Loans (Khata)
   private recalculateLoanBalances(loan: Loan): Loan {
-    const rawEntries = loan.repayments || [];
+    const rawEntries = [...(loan.repayments || [])].sort((a, b) =>
+      (a.date || '').localeCompare(b.date || '')
+    );
     const sumAdditional = rawEntries
       .filter(r => r.entryType === 'additional_loan')
       .reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -1816,7 +1819,7 @@ class StorageService {
         runningBalance = prevBal + amt;
         totalAdditional += amt;
       } else {
-        runningBalance = Math.max(0, prevBal - amt);
+        runningBalance = prevBal - amt;
         totalRepaid += amt;
       }
       return {
@@ -1830,11 +1833,13 @@ class StorageService {
     });
 
     const totalLoanTaken = baseInitial + totalAdditional;
-    const remainingBalance = Math.max(0, runningBalance);
+    const remainingBalance = runningBalance;
     const todayStr = new Date().toISOString().split('T')[0];
 
     let computedStatus: Loan['status'] = loan.status;
-    if (remainingBalance === 0 && totalLoanTaken > 0) {
+    if (remainingBalance < 0) {
+      computedStatus = 'Credit Balance';
+    } else if (remainingBalance === 0 && totalLoanTaken > 0) {
       computedStatus = 'Fully Repaid';
     } else if (loan.dueDate && loan.dueDate < todayStr && remainingBalance > 0) {
       computedStatus = 'Overdue';
@@ -1936,7 +1941,26 @@ class StorageService {
     if (!loan) return null;
 
     const entryType = repayment.entryType || 'repayment';
-    const updatedRepayments = [...(loan.repayments || []), { ...repayment, entryType }];
+    const prevBal = loan.remainingBalance || 0;
+    let enrichedNotes = repayment.notes || '';
+
+    if (entryType === 'repayment' && prevBal > 0 && repayment.amount > prevBal) {
+      const extraDeposit = repayment.amount - prevBal;
+      if (!enrichedNotes.includes('اضافی جمع')) {
+        enrichedNotes = `${enrichedNotes ? `${enrichedNotes} ` : ''}(بقایا قرض ${prevBal.toLocaleString()} منہا، اضافی جمع رقم: +${extraDeposit.toLocaleString()} ${loan.currency})`.trim();
+      }
+    } else if (entryType === 'additional_loan' && prevBal < 0) {
+      const creditUsed = Math.min(repayment.amount, Math.abs(prevBal));
+      const newBal = prevBal + repayment.amount;
+      if (!enrichedNotes.includes('جمع رقم')) {
+        enrichedNotes = `${enrichedNotes ? `${enrichedNotes} ` : ''}(سابقہ جمع رقم ${creditUsed.toLocaleString()} منہا، ${newBal <= 0 ? `بقایا جمع: +${Math.abs(newBal).toLocaleString()}` : `بقایا قرض: ${newBal.toLocaleString()}`} ${loan.currency})`.trim();
+      }
+    }
+
+    const updatedRepayments = [
+      ...(loan.repayments || []),
+      { ...repayment, entryType, notes: enrichedNotes || repayment.notes }
+    ];
 
     const updatedLoan = this.saveLoan({
       ...loan,
@@ -1957,8 +1981,8 @@ class StorageService {
       partyName: loan.borrowerName,
       paymentMethod: repayment.paymentMethod,
       description: isAdditionalLoan
-        ? `Additional Khata Loan given to ${loan.borrowerName} (${loan.loanNo})${repayment.notes ? `: ${repayment.notes}` : ''}`
-        : `Loan repayment received from ${loan.borrowerName} (${loan.loanNo})${repayment.notes ? `: ${repayment.notes}` : ''}`
+        ? `Additional Khata Loan given to ${loan.borrowerName} (${loan.loanNo})${enrichedNotes ? `: ${enrichedNotes}` : ''}`
+        : `Loan repayment / deposit received from ${loan.borrowerName} (${loan.loanNo})${enrichedNotes ? `: ${enrichedNotes}` : ''}`
     });
 
     return updatedLoan;
@@ -2121,8 +2145,9 @@ class StorageService {
 
     const prevBal = account.currentBalance;
     let newBal = prevBal;
+    const isDeposit = entry.type === 'initial_deposit' || entry.type === 'additional_deposit';
 
-    if (entry.type === 'initial_deposit' || entry.type === 'additional_deposit') {
+    if (isDeposit) {
       newBal = prevBal + entry.amount;
     } else if (
       entry.type === 'partial_withdrawal' ||
@@ -2133,8 +2158,18 @@ class StorageService {
       newBal = prevBal - entry.amount;
     }
 
+    let finalDescription = entry.description;
+    if (isDeposit && prevBal < 0 && !finalDescription.includes('منفی بقایا')) {
+      const settledMinus = Math.min(entry.amount, Math.abs(prevBal));
+      finalDescription =
+        newBal >= 0
+          ? `${entry.description} (منفی بقایا ${settledMinus.toLocaleString()} منہا، صافی جمع رقم: +${newBal.toLocaleString()} ${entry.currency})`
+          : `${entry.description} (منفی بقایا سے ${settledMinus.toLocaleString()} منہا، بقایا واجب الادا: ${newBal.toLocaleString()} ${entry.currency})`;
+    }
+
     const fullEntry: AmanatEntry = {
       ...entry,
+      description: finalDescription,
       id: `ame-${Date.now()}`,
       previousBalance: prevBal,
       newBalance: newBal
@@ -2151,7 +2186,7 @@ class StorageService {
     this.saveAmanatAccount(updatedAccount);
 
     // Cash movement record
-    const isCashIn = entry.type === 'initial_deposit' || entry.type === 'additional_deposit';
+    const isCashIn = isDeposit;
     this.addLedgerEntry({
       id: `led-${Date.now()}`,
       date: entry.date,
@@ -2162,7 +2197,7 @@ class StorageService {
       referenceId: entry.receiptNo,
       partyName: account.ownerName,
       paymentMethod: entry.paymentMethod || 'Cash',
-      description: `Amanat: ${entry.description} (${account.ownerName})${entry.bankName ? ` - ${entry.bankName}` : ''}`
+      description: `Amanat: ${finalDescription} (${account.ownerName})${entry.bankName ? ` - ${entry.bankName}` : ''}`
     });
 
     return updatedAccount;
@@ -2279,6 +2314,47 @@ class StorageService {
   }
 
   // Settings
+  private migrateBrandSettings(raw: BusinessSettings): { settings: BusinessSettings; changed: boolean } {
+    const oldUrBrand = 'ایگل اسٹار برانڈ';
+    const newUrBrand = 'ایگل ایس بی';
+    let changed = false;
+    const replaceUr = (val?: string): string | undefined => {
+      if (!val || !val.includes(oldUrBrand)) return val;
+      changed = true;
+      return val.replace(/ایگل اسٹار برانڈ/g, newUrBrand);
+    };
+
+    const newCashJamahUr = 'ایگل ایس بی کیش جمع پر آپ کے اعتماد کا شکریہ۔ رقم بوقتِ ضرورت دستیاب ہے۔';
+    const oldCashJamahUrRegex = /^(ایگل اسٹار برانڈ|ایگل ایس بی)\s*[-—]\s*پیسہ جمع و تحویل میں رکھی گئی رقم بوقت ضرورت فوری قابل واپسی ہے۔$/;
+    const oldCashJamahEnRegex = /^Thank you for trusting (Eagle Star Brand|Eagle SB) Cash Jamah Safekeeping\. Funds available on demand\.$/i;
+
+    let cashJamahUr = replaceUr(raw.receiptFooterCashJamahUr);
+    if (cashJamahUr && oldCashJamahUrRegex.test(cashJamahUr.trim())) {
+      cashJamahUr = newCashJamahUr;
+      changed = true;
+    }
+
+    let cashJamahEn = replaceUr(raw.receiptFooterCashJamahEn);
+    if (cashJamahEn && oldCashJamahEnRegex.test(cashJamahEn.trim())) {
+      cashJamahEn = '';
+      changed = true;
+    }
+
+    const migrated: BusinessSettings = {
+      ...raw,
+      businessNameUr: replaceUr(raw.businessNameUr) || newUrBrand,
+      receiptFooterUr: replaceUr(raw.receiptFooterUr) || defaultSettings.receiptFooterUr,
+      receiptFooterEn: replaceUr(raw.receiptFooterEn) || defaultSettings.receiptFooterEn,
+      receiptFooterCashJamahUr: cashJamahUr,
+      receiptFooterCashJamahEn: cashJamahEn,
+      receiptFooterDepositUr: replaceUr(raw.receiptFooterDepositUr),
+      receiptFooterDepositEn: replaceUr(raw.receiptFooterDepositEn),
+      receiptFooterLoanUr: replaceUr(raw.receiptFooterLoanUr),
+      receiptFooterLoanEn: replaceUr(raw.receiptFooterLoanEn)
+    };
+    return { settings: migrated, changed };
+  }
+
   getSettings(): BusinessSettings {
     const settings = this.load<BusinessSettings>(STORAGE_KEYS.SETTINGS, defaultSettings);
     if (
@@ -2289,7 +2365,7 @@ class StorageService {
         ...defaultSettings,
         ...settings,
         businessNameEn: 'Eagle Star Brand',
-        businessNameUr: 'ایگل اسٹار برانڈ',
+        businessNameUr: 'ایگل ایس بی',
         email: 'info@eaglestarbrand.com',
         receiptFooterEn:
           settings.receiptFooterEn && !settings.receiptFooterEn.includes('Al-Madina')
@@ -2300,12 +2376,13 @@ class StorageService {
             ? settings.receiptFooterUr
             : defaultSettings.receiptFooterUr
       };
+      const { settings: normalized } = this.migrateBrandSettings(updated);
       try {
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(normalized));
       } catch {
         // ignore
       }
-      return updated;
+      return normalized;
     }
     const mergedCurrencies =
       settings.currencies && settings.currencies.length > 0
@@ -2316,12 +2393,21 @@ class StorageService {
               : c
           );
 
-    return {
+    const merged: BusinessSettings = {
       ...defaultSettings,
       ...settings,
       defaultTransferCurrency: settings.defaultTransferCurrency || 'AED',
       currencies: mergedCurrencies
     };
+    const { settings: normalized, changed } = this.migrateBrandSettings(merged);
+    if (changed) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(normalized));
+      } catch {
+        // ignore
+      }
+    }
+    return normalized;
   }
 
   saveSettings(settings: BusinessSettings): void {
@@ -2935,7 +3021,7 @@ class StorageService {
   // Full backup & restore
   exportAllData(): string {
     const data = {
-      appName: 'Eagle Star Brand (ایگل اسٹار برانڈ)',
+      appName: 'Eagle Star Brand (ایگل ایس بی)',
       version: '2.0',
       exportedAt: new Date().toISOString(),
       customers: this.getCustomers(),
@@ -2997,7 +3083,7 @@ class StorageService {
         ? data.pk_dubai_ledger_v1
         : this.getLedgerEntries();
 
-      const settings =
+      const rawSettings =
         data.settings && typeof data.settings === 'object'
           ? data.settings
           : data.businessSettings && typeof data.businessSettings === 'object'
@@ -3005,6 +3091,7 @@ class StorageService {
           : data.pk_dubai_settings_v1 && typeof data.pk_dubai_settings_v1 === 'object'
           ? data.pk_dubai_settings_v1
           : this.getSettings();
+      const settings = this.migrateBrandSettings({ ...defaultSettings, ...rawSettings }).settings;
 
       const users = Array.isArray(data.users)
         ? data.users

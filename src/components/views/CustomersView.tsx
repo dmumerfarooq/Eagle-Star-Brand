@@ -341,7 +341,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   );
   const custAmanatBalance = activeMatchedAmanat?.currentBalance || 0;
   const custAmanatCurrency = activeMatchedAmanat?.currency || 'PKR';
-  const custOutstandingLoan = activeMatchedLoans.reduce((sum, l) => sum + l.remainingBalance, 0);
+  const custOutstandingLoan = activeMatchedLoans.reduce((sum, l) => sum + Math.max(0, l.remainingBalance), 0);
+  const custLoanExtraCredit = activeMatchedLoans.reduce(
+    (sum, l) => sum + (l.remainingBalance < 0 ? Math.abs(l.remainingBalance) : 0),
+    0
+  );
 
   // Trigger Print Complete Statement (Format J)
   const handlePrintCustomerStatement = (cust: Customer) => {
@@ -692,6 +696,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         <span className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded font-bold">
                           💰 پیسہ جمع: {custAmanat.currentBalance.toLocaleString()} {custAmanat.currency}
                         </span>
+                      ) : custAmanat && custAmanat.currentBalance < 0 ? (
+                        <span className="bg-rose-50 text-rose-900 border border-rose-300 px-2 py-0.5 rounded font-bold">
+                          ⚠ پیسہ جمع منفی: {custAmanat.currentBalance.toLocaleString()} {custAmanat.currency}
+                        </span>
                       ) : (
                         <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-0.5 rounded">
                           کوئی پیسہ جمع نہیں
@@ -705,6 +713,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       {custRemainingLoan > 0 ? (
                         <span className="bg-rose-50 text-rose-950 border border-rose-300 px-2 py-0.5 rounded font-bold">
                           📋 ادھار بقایا: {custRemainingLoan.toLocaleString()}
+                        </span>
+                      ) : custRemainingLoan < 0 ? (
+                        <span className="bg-teal-50 text-teal-900 border border-teal-300 px-2 py-0.5 rounded font-bold">
+                          💰 ادھار اضافی جمع: +{Math.abs(custRemainingLoan).toLocaleString()}
                         </span>
                       ) : (
                         <span className="bg-slate-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-bold">
@@ -979,7 +991,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-rose-950 flex items-center gap-1">
                       <BookOpen className="w-3.5 h-3.5 text-rose-600" />
-                      <span>{language === 'ur' ? 'واجب الادا ادھار' : 'Pending Udhar / Loan'}</span>
+                      <span>
+                        {custLoanExtraCredit > 0 && custOutstandingLoan === 0
+                          ? language === 'ur'
+                            ? 'ادھار کھاتہ اضافی جمع'
+                            : 'Khata Extra Credit'
+                          : language === 'ur'
+                          ? 'واجب الادا ادھار'
+                          : 'Pending Udhar / Loan'}
+                      </span>
                     </span>
                     {onOpenNewLoan && (
                       <button
@@ -993,12 +1013,23 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       </button>
                     )}
                   </div>
-                  <div className="text-xl font-black font-mono text-rose-950">
-                    {custOutstandingLoan.toLocaleString()}{' '}
+                  <div
+                    className={`text-xl font-black font-mono ${
+                      custLoanExtraCredit > 0 && custOutstandingLoan === 0
+                        ? 'text-emerald-700'
+                        : 'text-rose-950'
+                    }`}
+                  >
+                    {custLoanExtraCredit > 0 && custOutstandingLoan === 0
+                      ? `+${custLoanExtraCredit.toLocaleString()}`
+                      : custOutstandingLoan.toLocaleString()}{' '}
                     {activeMatchedLoans[0]?.currency || 'PKR'}
                   </div>
                   <span className="text-[10px] text-slate-500 font-medium block">
                     {activeMatchedLoans.length} {language === 'ur' ? 'قرضہ کھاتے' : 'Loans'}
+                    {custLoanExtraCredit > 0 && custOutstandingLoan > 0
+                      ? ` (+${custLoanExtraCredit.toLocaleString()} جمع)`
+                      : ''}
                   </span>
                 </div>
 
@@ -1008,18 +1039,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <CreditCard className="w-3.5 h-3.5 text-slate-600" />
                     <span>{language === 'ur' ? 'صافی مالیاتی پوزیشن' : 'Net Financial Position'}</span>
                   </span>
-                  <div
-                    className={`text-xl font-black font-mono ${
-                      custAmanatBalance >= custOutstandingLoan ? 'text-emerald-950' : 'text-rose-950'
-                    }`}
-                  >
-                    {(custAmanatBalance - custOutstandingLoan).toLocaleString()} {custAmanatCurrency}
-                  </div>
-                  <span className="text-[10px] text-slate-600 font-bold block">
-                    {custAmanatBalance >= custOutstandingLoan
-                      ? '✓ ہمارے پاس جمع شدہ فاضل فنڈز'
-                      : '⚠ گاہک کے ذمے خالص واجب الادا'}
-                  </span>
+                  {(() => {
+                    const netPos = custAmanatBalance + custLoanExtraCredit - custOutstandingLoan;
+                    return (
+                      <>
+                        <div
+                          className={`text-xl font-black font-mono ${
+                            netPos >= 0 ? 'text-emerald-950' : 'text-rose-950'
+                          }`}
+                        >
+                          {netPos.toLocaleString()} {custAmanatCurrency}
+                        </div>
+                        <span className="text-[10px] text-slate-600 font-bold block">
+                          {netPos >= 0
+                            ? '✓ ہمارے پاس جمع شدہ فاضل فنڈز'
+                            : '⚠ گاہک کے ذمے خالص واجب الادا'}
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1457,8 +1495,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 <td className="py-2.5 px-3 font-mono font-bold text-rose-700">
                                   {!isDep ? `-${entry.amount.toLocaleString()} ${entry.currency}` : '—'}
                                 </td>
-                                <td className="py-2.5 px-3 font-mono font-black text-slate-950">
+                                <td
+                                  className={`py-2.5 px-3 font-mono font-black ${
+                                    entry.newBalance < 0 ? 'text-rose-700' : 'text-slate-950'
+                                  }`}
+                                >
                                   {entry.newBalance.toLocaleString()} {entry.currency}
+                                  {entry.newBalance < 0 && (
+                                    <span className="block text-[10px] font-bold font-urdu-body">
+                                      (منفی واجب الادا)
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-3 text-center">
                                   <div className="flex items-center justify-center gap-1">
@@ -1540,10 +1587,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                             <span className="font-mono text-emerald-800">
                               واپسی ادا کی: {loanItem.totalRepaid.toLocaleString()}
                             </span>
-                            <span className="font-mono text-rose-700 font-black text-sm">
-                              بقایا واجب الادا: {loanItem.remainingBalance.toLocaleString()} {loanItem.currency}
+                            <span
+                              className={`font-mono font-black text-sm ${
+                                loanItem.remainingBalance < 0 ? 'text-emerald-700' : 'text-rose-700'
+                              }`}
+                            >
+                              {loanItem.remainingBalance < 0
+                                ? `اضافی جمع (کریڈٹ): +${Math.abs(loanItem.remainingBalance).toLocaleString()} ${loanItem.currency}`
+                                : `بقایا واجب الادا: ${loanItem.remainingBalance.toLocaleString()} ${loanItem.currency}`}
                             </span>
-                            {onRecordRepayment && loanItem.remainingBalance > 0 && (
+                            {onRecordRepayment && (
                               <button
                                 onClick={() => {
                                   setSelectedCustomer(null);
@@ -1551,18 +1604,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 }}
                                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold"
                               >
-                                + ادائیگی وصول کریں
+                                + واپسی / مزید قرض
                               </button>
                             )}
                             <button
                               onClick={() =>
                                 openReceipt({
-                                  format: 'A',
+                                  format: 'K',
                                   loan: loanItem
                                 })
                               }
                               className="p-1 text-slate-600 hover:text-slate-900"
-                              title="سلپ پرنٹ کریں"
+                              title="مکمل کھاتہ اسٹیٹمنٹ پرنٹ کریں"
                             >
                               <Printer className="w-4 h-4" />
                             </button>
@@ -1599,33 +1652,41 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                             <table className="w-full border-collapse text-[11px]">
                               <thead>
                                 <tr className="bg-slate-50 text-slate-700 border-b border-slate-200">
-                                  <th className="py-1 px-2 text-start">قسط #</th>
+                                  <th className="py-1 px-2 text-start">اندراج #</th>
                                   <th className="py-1 px-2 text-start">تاریخ</th>
                                   <th className="py-1 px-2 text-start">رسید نمبر</th>
-                                  <th className="py-1 px-2 text-start">ادا شدہ رقم</th>
+                                  <th className="py-1 px-2 text-start">قسم و رقم</th>
                                   <th className="py-1 px-2 text-start">طریقہ</th>
                                   <th className="py-1 px-2 text-start">وصول کنندہ</th>
-                                  <th className="py-1 px-2 text-start">بقایا</th>
+                                  <th className="py-1 px-2 text-start">صافی بقایا</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                {loanItem.repayments.map((rp, rIdx) => (
-                                  <tr key={rp.id || rIdx}>
-                                    <td className="py-1 px-2 font-mono text-slate-600">{rIdx + 1}</td>
-                                    <td className="py-1 px-2 font-mono text-slate-700">{rp.date}</td>
-                                    <td className="py-1 px-2 font-mono font-bold text-blue-900">
-                                      {rp.receiptNo}
-                                    </td>
-                                    <td className="py-1 px-2 font-mono font-bold text-emerald-800">
-                                      {rp.amount.toLocaleString()} {rp.currency}
-                                    </td>
-                                    <td className="py-1 px-2">{rp.paymentMethod || 'Cash'}</td>
-                                    <td className="py-1 px-2">{rp.receivedBy || 'آفس'}</td>
-                                    <td className="py-1 px-2 font-mono font-bold text-slate-900">
-                                      {rp.newBalance?.toLocaleString() || '—'}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {loanItem.repayments.map((rp, rIdx) => {
+                                  const isAdd = rp.entryType === 'additional_loan';
+                                  const nb = rp.newBalance ?? 0;
+                                  return (
+                                    <tr key={rp.id || rIdx}>
+                                      <td className="py-1 px-2 font-mono text-slate-600">{rIdx + 1}</td>
+                                      <td className="py-1 px-2 font-mono text-slate-700">{rp.date}</td>
+                                      <td className="py-1 px-2 font-mono font-bold text-blue-900">
+                                        {rp.receiptNo}
+                                      </td>
+                                      <td className={`py-1 px-2 font-mono font-bold ${isAdd ? 'text-rose-700' : 'text-emerald-800'}`}>
+                                        {isAdd ? '+' : '-'}
+                                        {rp.amount.toLocaleString()} {rp.currency}{' '}
+                                        <span className="text-[10px] font-urdu-body">
+                                          ({isAdd ? 'مزید قرض' : 'واپسی/جمع'})
+                                        </span>
+                                      </td>
+                                      <td className="py-1 px-2">{rp.paymentMethod || 'Cash'}</td>
+                                      <td className="py-1 px-2">{rp.receivedBy || 'آفس'}</td>
+                                      <td className={`py-1 px-2 font-mono font-bold ${nb < 0 ? 'text-emerald-700' : 'text-slate-900'}`}>
+                                        {nb < 0 ? `+${Math.abs(nb).toLocaleString()} (جمع)` : nb.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

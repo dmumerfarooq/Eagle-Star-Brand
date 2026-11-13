@@ -137,7 +137,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalLentPkr = loans.reduce((sum, l) => sum + (l.currency === 'PKR' ? l.originalAmount : 0), 0);
   const totalRepaidPkr = loans.reduce((sum, l) => sum + (l.currency === 'PKR' ? l.totalRepaid : 0), 0);
   const outstandingLoansPkr = loans.reduce(
-    (sum, l) => sum + (l.currency === 'PKR' ? l.remainingBalance : 0),
+    (sum, l) => sum + (l.currency === 'PKR' ? Math.max(0, l.remainingBalance) : 0),
     0
   );
   const khataRecoveryRate = totalLentPkr > 0 ? Math.round((totalRepaidPkr / totalLentPkr) * 100) : 0;
@@ -459,8 +459,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             {language === 'ur' ? 'ادھار:' : 'Loan:'} {l.borrowerName} ({l.borrowerPhone})
                           </span>
                         </div>
-                        <span className="text-[11px] text-rose-800 font-mono font-bold">
-                          {language === 'ur' ? 'باقی رقم:' : 'Balance:'} {formatMoney(l.remainingBalance, l.currency)}
+                        <span className={`text-[11px] font-mono font-bold ${l.remainingBalance < 0 ? 'text-emerald-700' : 'text-rose-800'}`}>
+                          {l.remainingBalance < 0
+                            ? `${language === 'ur' ? 'اضافی جمع:' : 'Credit:'} +${formatMoney(Math.abs(l.remainingBalance), l.currency)}`
+                            : `${language === 'ur' ? 'باقی رقم:' : 'Balance:'} ${formatMoney(l.remainingBalance, l.currency)}`}
                         </span>
                       </div>
                       <button

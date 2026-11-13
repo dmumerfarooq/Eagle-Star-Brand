@@ -681,7 +681,7 @@ export const OrderRegisterView: React.FC = () => {
               </h2>
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-700 mt-2 px-1 gap-2">
                 <span className="font-bold text-slate-900">
-                  {settings.businessNameUr || 'ایگل اسٹار برانڈ'} - مکمل اسٹیشن آرڈر لسٹ، جمع، ٹرانسفر اور بقایا بیلنس (PKR & AED)
+                  {settings.businessNameUr || 'ایگل ایس بی'} - مکمل اسٹیشن آرڈر لسٹ، جمع، ٹرانسفر اور بقایا بیلنس (PKR & AED)
                 </span>
                 <span className="font-mono font-bold">
                   {selectedDate ? `تاریخ: ${selectedDate}` : `تاریخ: ${new Date().toISOString().split('T')[0]}`}

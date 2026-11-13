@@ -39,23 +39,21 @@ export const RecordRepaymentModal: React.FC<RecordRepaymentModalProps> = ({
   if (!isOpen || !loan) return null;
 
   const parsedAmount = parseFloat(amount) || 0;
-  const maxRepayable = loan.remainingBalance;
-  const isOverpaying = entryType === 'repayment' && parsedAmount > maxRepayable;
 
   const previewNewBalance =
     entryType === 'additional_loan'
       ? loan.remainingBalance + parsedAmount
-      : Math.max(0, loan.remainingBalance - parsedAmount);
+      : loan.remainingBalance - parsedAmount;
 
   const handleSave = (printImmediately: boolean) => {
-    if (!parsedAmount || parsedAmount <= 0 || isOverpaying) return;
+    if (!parsedAmount || parsedAmount <= 0) return;
 
     const receiptNo = `REC-${Math.floor(10000 + Math.random() * 90000)}`;
     const prevBal = loan.remainingBalance;
     const newBal =
       entryType === 'additional_loan'
         ? prevBal + parsedAmount
-        : Math.max(0, prevBal - parsedAmount);
+        : prevBal - parsedAmount;
 
     const newRepaymentObj: LoanRepayment = {
       id: `REP-${Date.now()}`,
@@ -174,9 +172,23 @@ export const RecordRepaymentModal: React.FC<RecordRepaymentModalProps> = ({
               </span>
             </div>
             <div className="flex justify-between pt-2 border-t border-slate-200 text-sm">
-              <span className="font-bold text-slate-800">موجودہ بقایا قرض:</span>
-              <span className="font-mono font-bold text-rose-600">
-                {loan.remainingBalance.toLocaleString()} {loan.currency}
+              <span className="font-bold text-slate-800">
+                {loan.remainingBalance < 0
+                  ? 'موجودہ اضافی جمع (کریڈٹ بیلنس):'
+                  : 'موجودہ بقایا قرض:'}
+              </span>
+              <span
+                className={`font-mono font-bold ${
+                  loan.remainingBalance < 0
+                    ? 'text-emerald-700'
+                    : loan.remainingBalance === 0
+                    ? 'text-slate-700'
+                    : 'text-rose-600'
+                }`}
+              >
+                {loan.remainingBalance < 0
+                  ? `+${Math.abs(loan.remainingBalance).toLocaleString()} ${loan.currency} (جمع)`
+                  : `${loan.remainingBalance.toLocaleString()} ${loan.currency}`}
               </span>
             </div>
           </div>
@@ -220,20 +232,13 @@ export const RecordRepaymentModal: React.FC<RecordRepaymentModalProps> = ({
                 }
                 placeholder=""
                 className={`w-full border rounded-lg p-2.5 text-sm font-mono font-bold ${
-                  isOverpaying
-                    ? 'border-rose-500 bg-rose-50 text-rose-700'
-                    : entryType === 'additional_loan'
+                  entryType === 'additional_loan'
                     ? 'border-rose-400'
                     : 'border-emerald-500'
                 }`}
                 dir="ltr"
                 autoFocus
               />
-              {isOverpaying && (
-                <span className="text-[11px] text-rose-600 block mt-1 font-urdu-body">
-                  واپسی رقم بقایا قرض سے زیادہ نہیں ہو سکتی
-                </span>
-              )}
             </div>
           </div>
 
@@ -304,26 +309,56 @@ export const RecordRepaymentModal: React.FC<RecordRepaymentModalProps> = ({
           </div>
 
           <div
-            className={`rounded-xl p-3 flex justify-between items-center text-xs border font-urdu-body ${
-              entryType === 'additional_loan'
-                ? 'bg-rose-50 border-rose-200'
-                : 'bg-emerald-50 border-emerald-200'
+            className={`rounded-xl p-3 space-y-1.5 text-xs border font-urdu-body ${
+              previewNewBalance < 0 || entryType === 'repayment'
+                ? 'bg-emerald-50 border-emerald-200'
+                : 'bg-rose-50 border-rose-200'
             }`}
           >
-            <span
-              className={`font-bold ${
-                entryType === 'additional_loan' ? 'text-rose-900' : 'text-emerald-900'
-              }`}
-            >
-              اندراج کے بعد نیا بقایا قرض:
-            </span>
-            <span
-              className={`font-mono font-bold text-base ${
-                entryType === 'additional_loan' ? 'text-rose-700' : 'text-emerald-700'
-              }`}
-            >
-              {previewNewBalance.toLocaleString()} {loan.currency}
-            </span>
+            <div className="flex justify-between items-center">
+              <span
+                className={`font-bold ${
+                  previewNewBalance < 0
+                    ? 'text-emerald-900'
+                    : previewNewBalance === 0
+                    ? 'text-slate-900'
+                    : 'text-rose-900'
+                }`}
+              >
+                {previewNewBalance < 0
+                  ? 'اندراج کے بعد اضافی جمع (کریڈٹ بیلنس):'
+                  : previewNewBalance === 0
+                  ? 'اندراج کے بعد نیا کھاتہ بقایا:'
+                  : 'اندراج کے بعد نیا بقایا قرض:'}
+              </span>
+              <span
+                className={`font-mono font-bold text-base ${
+                  previewNewBalance < 0
+                    ? 'text-emerald-700'
+                    : previewNewBalance === 0
+                    ? 'text-slate-900'
+                    : 'text-rose-700'
+                }`}
+              >
+                {previewNewBalance < 0
+                  ? `+${Math.abs(previewNewBalance).toLocaleString()} ${loan.currency} (جمع)`
+                  : previewNewBalance === 0
+                  ? `0 ${loan.currency} (بے باق)`
+                  : `${previewNewBalance.toLocaleString()} ${loan.currency}`}
+              </span>
+            </div>
+            {entryType === 'repayment' && parsedAmount > 0 && loan.remainingBalance > 0 && parsedAmount > loan.remainingBalance && (
+              <p className="text-[11px] font-bold text-emerald-800">
+                خودکار سیٹلمنٹ: {loan.remainingBalance.toLocaleString()} {loan.currency} قرض بے باق ہو کر باقی{' '}
+                {(parsedAmount - loan.remainingBalance).toLocaleString()} {loan.currency} اضافی جمع (کریڈٹ) میں محفوظ ہو جائے گا۔
+              </p>
+            )}
+            {entryType === 'additional_loan' && parsedAmount > 0 && loan.remainingBalance < 0 && (
+              <p className="text-[11px] font-bold text-emerald-900">
+                خودکار سیٹلمنٹ: سابقہ اضافی جمع ({Math.abs(loan.remainingBalance).toLocaleString()} {loan.currency}) میں سے{' '}
+                {Math.min(parsedAmount, Math.abs(loan.remainingBalance)).toLocaleString()} {loan.currency} منہا ہو جائے گا۔
+              </p>
+            )}
           </div>
         </div>
 
@@ -338,7 +373,7 @@ export const RecordRepaymentModal: React.FC<RecordRepaymentModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={!parsedAmount || parsedAmount <= 0 || isOverpaying}
+            disabled={!parsedAmount || parsedAmount <= 0}
             onClick={() => handleSave(false)}
             className={`px-4 py-2 rounded-lg disabled:opacity-50 text-white text-xs font-semibold ${
               entryType === 'additional_loan'
@@ -350,7 +385,7 @@ export const RecordRepaymentModal: React.FC<RecordRepaymentModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={!parsedAmount || parsedAmount <= 0 || isOverpaying}
+            disabled={!parsedAmount || parsedAmount <= 0}
             onClick={() => handleSave(true)}
             className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5"
           >

@@ -846,7 +846,7 @@ export const ReceiptViewerModal: React.FC = () => {
     const raw = txt || fallback;
     if (!raw) return '';
     return raw
-      .replace(/ایگل اسٹار برانڈ/g, settings.businessNameUr || 'ایگل اسٹار برانڈ')
+      .replace(/ایگل اسٹار برانڈ/g, settings.businessNameUr || 'ایگل ایس بی')
       .replace(/Eagle Star Brand/gi, settings.businessNameEn || 'Eagle Star Brand');
   };
 
@@ -854,6 +854,9 @@ export const ReceiptViewerModal: React.FC = () => {
     if (receiptModal.isOpen) {
       if (receiptModal.format === 'J') {
         setActiveFormat('J');
+        setOrientation('landscape');
+      } else if (receiptModal.format === 'K') {
+        setActiveFormat('K');
         setOrientation('landscape');
       } else if (receiptModal.format === 'I') {
         setActiveFormat('I');
@@ -872,7 +875,7 @@ export const ReceiptViewerModal: React.FC = () => {
         setOrientation('landscape');
       } else {
         setActiveFormat(receiptModal.format || 'A');
-        setOrientation(receiptModal.format === 'A' ? 'portrait' : 'landscape');
+        setOrientation(receiptModal.format === 'A' || receiptModal.format === 'F' ? 'portrait' : 'landscape');
       }
 
       setPaperSize('A4');
@@ -911,7 +914,7 @@ export const ReceiptViewerModal: React.FC = () => {
     );
   };
 
-  const isWideRegisterFormat = activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || activeFormat === 'I' || activeFormat === 'J';
+  const isWideRegisterFormat = activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || activeFormat === 'I' || activeFormat === 'J' || activeFormat === 'K';
 
   // Print handler - direct, instant native browser print
   const handlePrint = () => {
@@ -934,7 +937,7 @@ export const ReceiptViewerModal: React.FC = () => {
         'info'
       );
 
-      const isRtl = activeFormat === 'A' || activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || activeFormat === 'I' || activeFormat === 'J' || language === 'ur';
+      const isRtl = activeFormat === 'A' || activeFormat === 'B' || activeFormat === 'E' || activeFormat === 'G' || activeFormat === 'H' || activeFormat === 'I' || activeFormat === 'J' || activeFormat === 'K' || language === 'ur';
 
       // Use wider canvas for multi-column Station Order List / Register sheets
       const targetWidth = isWideRegisterFormat ? 1040 : 720;
@@ -1037,6 +1040,8 @@ export const ReceiptViewerModal: React.FC = () => {
         reportTitle ||
         (activeFormat === 'J'
           ? `Customer_Statement_${customer?.name || 'Customer'}_${customer?.customerCode || 'Code'}`
+          : activeFormat === 'K'
+          ? `Khata_Statement_${loan?.borrowerName || 'Borrower'}_${loan?.loanNo || 'Loan'}`
           : activeFormat === 'G'
           ? 'Cash_Jama_Register'
           : activeFormat === 'H'
@@ -1128,6 +1133,41 @@ export const ReceiptViewerModal: React.FC = () => {
                   }}
                   className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                     activeFormat === 'A'
+                      ? 'bg-slate-950 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{language === 'ur' ? 'انفرادی رسید واؤچر' : 'Single Slip'}</span>
+                </button>
+              </div>
+            )}
+
+            {loan && !transfer && !amanatAccount && (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300 text-xs font-bold font-urdu-heading">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormat('K');
+                    setOrientation('landscape');
+                  }}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                    activeFormat === 'K'
+                      ? 'bg-slate-950 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'ur' ? 'مکمل کھاتہ اسٹیٹمنٹ' : 'Full Khata Statement'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFormat('A');
+                    setOrientation('portrait');
+                  }}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                    activeFormat === 'A' || activeFormat === 'F'
                       ? 'bg-slate-950 text-white shadow-xs'
                       : 'text-slate-700 hover:bg-white'
                   }`}
@@ -1383,14 +1423,15 @@ export const ReceiptViewerModal: React.FC = () => {
                     <p className="font-musaffah-title text-sm sm:text-base font-bold text-emerald-950" dir="rtl">
                       {resolveBrandText(
                         settings.receiptFooterCashJamahUr,
-                        'ایگل اسٹار برانڈ - پیسہ جمع و تحویل میں رکھی گئی رقم بوقت ضرورت فوری قابل واپسی ہے۔'
+                        'ایگل ایس بی کیش جمع پر آپ کے اعتماد کا شکریہ۔ رقم بوقتِ ضرورت دستیاب ہے۔'
                       )}
                     </p>
-                    {settings.receiptFooterCashJamahEn && (
-                      <p className="text-[10px] text-slate-700 font-bold" dir="ltr">
-                        {resolveBrandText(settings.receiptFooterCashJamahEn)}
-                      </p>
-                    )}
+                    {settings.receiptFooterCashJamahEn &&
+                      settings.receiptFooterCashJamahEn !== settings.receiptFooterCashJamahUr && (
+                        <p className="text-[10px] text-slate-700 font-bold" dir="ltr">
+                          {resolveBrandText(settings.receiptFooterCashJamahEn)}
+                        </p>
+                      )}
                   </div>
                   <div className="flex justify-between items-end pt-2 text-xs">
                     <div className="text-center">
@@ -1403,7 +1444,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     </div>
                     <div className="text-center">
                       <div className="border-b border-slate-600 w-36 mb-1"></div>
-                      <span>مہر و تصدیق {settings.businessNameUr || 'ایگل اسٹار برانڈ'}</span>
+                      <span>مہر و تصدیق {settings.businessNameUr || 'ایگل ایس بی'}</span>
                     </div>
                   </div>
                 </div>
@@ -1508,20 +1549,36 @@ export const ReceiptViewerModal: React.FC = () => {
                             <td className="border border-slate-300 py-2 px-2 font-mono font-semibold text-right text-emerald-700">
                               {ln.totalRepaid.toLocaleString()} {ln.currency}
                             </td>
-                            <td className="border border-slate-300 py-2 px-2 font-mono font-extrabold text-right text-rose-700 bg-rose-50/50">
-                              {ln.remainingBalance.toLocaleString()} {ln.currency}
+                            <td
+                              className={`border border-slate-300 py-2 px-2 font-mono font-extrabold text-right ${
+                                ln.remainingBalance < 0
+                                  ? 'text-emerald-800 bg-emerald-50/60'
+                                  : 'text-rose-700 bg-rose-50/50'
+                              }`}
+                            >
+                              {ln.remainingBalance < 0
+                                ? `+${Math.abs(ln.remainingBalance).toLocaleString()} ${ln.currency} (جمع)`
+                                : `${ln.remainingBalance.toLocaleString()} ${ln.currency}`}
                             </td>
                             <td className="border border-slate-300 py-2 px-2 text-center">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  ln.status === 'Fully Repaid'
+                                  ln.status === 'Credit Balance'
+                                    ? 'bg-teal-100 text-teal-900'
+                                    : ln.status === 'Fully Repaid'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : ln.status === 'Overdue'
                                     ? 'bg-rose-100 text-rose-800'
                                     : 'bg-amber-100 text-amber-800'
                                 }`}
                               >
-                                {ln.status === 'Fully Repaid' ? 'ادا شدہ' : ln.status === 'Overdue' ? 'واجب الادا' : 'فعال کھاتہ'}
+                                {ln.status === 'Credit Balance'
+                                  ? 'اضافی جمع (کریڈٹ)'
+                                  : ln.status === 'Fully Repaid'
+                                  ? 'ادا شدہ'
+                                  : ln.status === 'Overdue'
+                                  ? 'واجب الادا'
+                                  : 'فعال کھاتہ'}
                               </span>
                             </td>
                           </tr>
@@ -1540,7 +1597,7 @@ export const ReceiptViewerModal: React.FC = () => {
                           {batchLoans.reduce((s, l) => s + l.totalRepaid, 0).toLocaleString()}
                         </td>
                         <td className="border border-slate-400 py-2 px-2 font-mono font-extrabold text-right text-rose-800 bg-rose-100">
-                          {batchLoans.reduce((s, l) => s + l.remainingBalance, 0).toLocaleString()}
+                          {batchLoans.reduce((s, l) => s + Math.max(0, l.remainingBalance), 0).toLocaleString()}
                         </td>
                         <td className="border border-slate-400 py-2 px-2 text-center font-bold text-[11px]">
                           {batchLoans.filter(l => l.status === 'Outstanding' || l.status === 'Partially Repaid').length} فعال
@@ -1556,7 +1613,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     <p className="font-musaffah-title text-sm sm:text-base font-bold text-emerald-950" dir="rtl">
                       {resolveBrandText(
                         settings.receiptFooterLoanUr,
-                        'ایگل اسٹار برانڈ - ادھار کھاتہ و قرضہ واپسی باقاعدگی سے ادا کریں۔ آپ کے تعاون کا شکریہ!'
+                        'ایگل ایس بی - ادھار کھاتہ و قرضہ واپسی باقاعدگی سے ادا کریں۔ آپ کے تعاون کا شکریہ!'
                       )}
                     </p>
                     {settings.receiptFooterLoanEn && (
@@ -1576,7 +1633,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     </div>
                     <div className="text-center">
                       <div className="border-b border-slate-600 w-36 mb-1"></div>
-                      <span>مہر و تصدیق {settings.businessNameUr || 'ایگل اسٹار برانڈ'}</span>
+                      <span>مہر و تصدیق {settings.businessNameUr || 'ایگل ایس بی'}</span>
                     </div>
                   </div>
                 </div>
@@ -1628,7 +1685,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     </p>
                     <div className="flex flex-wrap items-center justify-between text-xs text-slate-800 mt-2 px-2 border-t border-slate-200 pt-1.5 font-bold">
                       <span>
-                        {settings.businessNameUr || 'ایگل اسٹار برانڈ'} - اسٹیشن رجسٹر شیٹ (پاکستانی روپے PKR و درہم AED)
+                        {settings.businessNameUr || 'ایگل ایس بی'} - اسٹیشن رجسٹر شیٹ (پاکستانی روپے PKR و درہم AED)
                       </span>
                       <span className="font-mono">
                         تاریخ: {receiptModal.filterDate || transfer?.date || new Date().toISOString().split('T')[0]}
@@ -2012,7 +2069,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     </div>
                     <div className="text-center text-slate-800 font-bold">
                       <span>
-                        {settings.businessNameUr || 'ایگل اسٹار برانڈ'} ({settings.branchUr || settings.branchEn || 'دبئی تا پاکستان'})
+                        {settings.businessNameUr || 'ایگل ایس بی'} ({settings.branchUr || settings.branchEn || 'دبئی تا پاکستان'})
                       </span>
                     </div>
                     <div>
@@ -2207,7 +2264,7 @@ export const ReceiptViewerModal: React.FC = () => {
                         <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl">
                           {resolveBrandText(
                             settings.receiptFooterDepositUr || settings.receiptFooterUr,
-                            'ایگل اسٹار برانڈ - کیش جمع شدگی و کاؤنٹر فنڈز ڈپازٹ رسید۔ آپ کے اعتماد کا شکریہ!'
+                            'ایگل ایس بی - کیش جمع شدگی و کاؤنٹر فنڈز ڈپازٹ رسید۔ آپ کے اعتماد کا شکریہ!'
                           )}
                         </p>
                         {settings.receiptFooterUr && (
@@ -2222,7 +2279,7 @@ export const ReceiptViewerModal: React.FC = () => {
                           <span>دستخط اکاؤنٹنٹ / کیشئر</span>
                         </div>
                         <div className="text-center text-slate-800 font-bold">
-                          <span>{settings.businessNameUr || 'ایگل اسٹار برانڈ'} ({settings.branchUr || settings.branchEn})</span>
+                          <span>{settings.businessNameUr || 'ایگل ایس بی'} ({settings.branchUr || settings.branchEn})</span>
                         </div>
                         <div>
                           <div className="border-b border-slate-600 w-36 mb-1"></div>
@@ -2323,9 +2380,27 @@ export const ReceiptViewerModal: React.FC = () => {
                           <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ کرنسی:</span>
                           <span className="font-mono font-black text-emerald-800">{acctCurrency}</span>
                         </div>
-                        <div className="bg-emerald-100 border border-emerald-300 rounded-lg p-1.5 text-center">
-                          <span className="text-emerald-950 block text-[10px] font-bold">موجودہ صافی بیلنس:</span>
-                          <span className="font-mono font-black text-emerald-950 text-sm">
+                        <div
+                          className={`border rounded-lg p-1.5 text-center ${
+                            currentBal < 0
+                              ? 'bg-rose-100 border-rose-300'
+                              : 'bg-emerald-100 border-emerald-300'
+                          }`}
+                        >
+                          <span
+                            className={`block text-[10px] font-bold ${
+                              currentBal < 0 ? 'text-rose-950' : 'text-emerald-950'
+                            }`}
+                          >
+                            {currentBal < 0
+                              ? 'موجودہ منفی بقایا (واجب الادا):'
+                              : 'موجودہ صافی جمع بیلنس:'}
+                          </span>
+                          <span
+                            className={`font-mono font-black text-sm ${
+                              currentBal < 0 ? 'text-rose-950' : 'text-emerald-950'
+                            }`}
+                          >
                             {currentBal.toLocaleString()} {acctCurrency}
                           </span>
                         </div>
@@ -2409,8 +2484,21 @@ export const ReceiptViewerModal: React.FC = () => {
                                   <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-rose-700">
                                     {!isDep ? `-${entry.amount.toLocaleString()}` : '—'}
                                   </td>
-                                  <td className="border border-slate-300 py-2 px-2 font-mono font-black text-right text-slate-950 bg-slate-50">
-                                    {entry.newBalance.toLocaleString()} {acctCurrency}
+                                  <td
+                                    className={`border border-slate-300 py-2 px-2 font-mono font-black text-right ${
+                                      entry.newBalance < 0
+                                        ? 'text-rose-800 bg-rose-50/70'
+                                        : 'text-slate-950 bg-slate-50'
+                                    }`}
+                                  >
+                                    <div>{entry.newBalance.toLocaleString()} {acctCurrency}</div>
+                                    <span className="text-[10px] font-bold font-urdu-body block">
+                                      {entry.newBalance < 0
+                                        ? 'منفی (واجب الادا)'
+                                        : entry.newBalance > 0
+                                        ? 'جمع بیلنس'
+                                        : 'بے باق'}
+                                    </span>
                                   </td>
                                 </tr>
                               );
@@ -2428,8 +2516,17 @@ export const ReceiptViewerModal: React.FC = () => {
                             <td className="border border-slate-400 py-2.5 px-2 font-mono font-extrabold text-right text-rose-900">
                               -{totalWithdrawn.toLocaleString()} {acctCurrency}
                             </td>
-                            <td className="border border-slate-400 py-2.5 px-2 font-mono font-black text-right text-slate-950 text-sm bg-slate-300">
-                              {currentBal.toLocaleString()} {acctCurrency}
+                            <td
+                              className={`border border-slate-400 py-2.5 px-2 font-mono font-black text-right text-sm ${
+                                currentBal < 0
+                                  ? 'text-rose-950 bg-rose-200'
+                                  : 'text-slate-950 bg-slate-300'
+                              }`}
+                            >
+                              {currentBal.toLocaleString()} {acctCurrency}{' '}
+                              <span className="text-[11px] font-urdu-body">
+                                ({currentBal < 0 ? 'منفی واجب الادا' : currentBal > 0 ? 'جمع' : 'صفر'})
+                              </span>
                             </td>
                           </tr>
                         </tfoot>
@@ -2442,7 +2539,326 @@ export const ReceiptViewerModal: React.FC = () => {
                         <p className="font-musaffah-title text-sm font-bold text-emerald-950" dir="rtl">
                           {resolveBrandText(
                             settings.receiptFooterCashJamahUr,
-                            'ایگل اسٹار برانڈ — انفرادی پیسہ جمع و تحویل میں رکھی گئی رقم بوقت ضرورت فوری قابل واپسی ہے۔'
+                            'ایگل ایس بی کیش جمع پر آپ کے اعتماد کا شکریہ۔ رقم بوقتِ ضرورت دستیاب ہے۔'
+                          )}
+                        </p>
+                        {settings.receiptFooterCashJamahEn &&
+                          settings.receiptFooterCashJamahEn !== settings.receiptFooterCashJamahUr && (
+                            <p className="text-[10px] text-slate-700 font-bold mt-0.5" dir="ltr">
+                              {resolveBrandText(settings.receiptFooterCashJamahEn)}
+                            </p>
+                          )}
+                      </div>
+                      <div className="flex justify-between items-end pt-2 text-xs">
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>تیار کنندہ (Prepared By)</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>دستخط کھاتہ دار</span>
+                        </div>
+                        <div className="text-center">
+                          <div className="border-b border-slate-600 w-36 mb-1"></div>
+                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل ایس بی'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : activeFormat === 'K' && loan ? (
+              /* FORMAT K: INDIVIDUAL KHATA LOAN UNIFIED STATEMENT (ALL LOANS TAKEN, RETURNS & EXTRA DEPOSIT CREDIT) */
+              (() => {
+                const entries = loan.repayments || [];
+                const sumAdditional = entries
+                  .filter(e => e.entryType === 'additional_loan')
+                  .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                const baseInitial =
+                  loan.initialAmount !== undefined && Number(loan.initialAmount) >= 0
+                    ? Number(loan.initialAmount)
+                    : Math.max(0, (Number(loan.originalAmount) || 0) - sumAdditional);
+                const loanCurrency = loan.currency || 'PKR';
+                const currentBal = loan.remainingBalance;
+
+                return (
+                  <div className="space-y-5 text-slate-900" dir="rtl">
+                    {/* Header with Brand Letterhead */}
+                    <div className="border-b-2 border-slate-900 pb-3">
+                      <div className="flex flex-col sm:flex-row items-center justify-between pb-2 mb-2 border-b border-slate-200 gap-2">
+                        <EagleStarLogo
+                          variant="print"
+                          size="sm"
+                          showSubtitle={true}
+                          customNameEn={settings.businessNameEn}
+                          customNameUr={settings.businessNameUr}
+                          customSubtitle={settings.branchEn}
+                          customLogoUrl={settings.customLogoUrl}
+                        />
+                        <div className="text-right sm:text-left text-[11px] text-slate-700 font-mono space-y-0.5" dir="ltr">
+                          <p className="font-bold text-slate-900">{settings.branchEn || branchName}</p>
+                          {settings.branchUr && (
+                            <p className="font-bold text-slate-900 font-musaffah-title" dir="rtl">
+                              {settings.branchUr}
+                            </p>
+                          )}
+                          {settings.addressUr && (
+                            <p className="font-bold text-slate-800 font-musaffah-title" dir="rtl">
+                              {settings.addressUr}
+                            </p>
+                          )}
+                          <p>
+                            Helpline: {settings.phoneEn}
+                            {settings.phoneUr && settings.phoneUr !== settings.phoneEn ? ` | ${settings.phoneUr}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-center pt-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold font-musaffah-title text-slate-950">
+                          انفرادی قرضہ / ادھار و واپسی مکمل کھاتہ اسٹیٹمنٹ
+                        </h1>
+                        <p className="text-xs text-slate-600 font-brand-en" dir="ltr">
+                          {(settings.businessNameEn || 'EAGLE STAR BRAND').toUpperCase()} — INDIVIDUAL KHATA LOAN & DEPOSIT UNIFIED STATEMENT
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Borrower Account Details Card */}
+                    <div className="border-2 border-slate-900 rounded-xl p-3.5 bg-slate-50 text-xs">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ دار / قرض دار کا نام:</span>
+                          <span className="font-black text-slate-950 text-sm font-urdu-heading">{loan.borrowerName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ نمبر (Khata No):</span>
+                          <span className="font-mono font-black text-slate-950 text-sm">{loan.loanNo}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">رابطہ / فون نمبر:</span>
+                          <span className="font-mono font-bold text-slate-950 text-xs" dir="ltr">{loan.borrowerPhone || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">شہر / پتہ:</span>
+                          <span className="font-bold text-slate-950 text-xs">{loan.borrowerAddress || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ آغاز تاریخ:</span>
+                          <span className="font-mono font-semibold text-slate-900">{loan.loanDate || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">واپسی کی تاریخ:</span>
+                          <span className="font-mono font-bold text-slate-900">{loan.dueDate || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-600 block text-[11px] font-urdu-heading">کھاتہ کرنسی:</span>
+                          <span className="font-mono font-black text-blue-900">{loanCurrency}</span>
+                        </div>
+                        <div
+                          className={`border rounded-lg p-1.5 text-center ${
+                            currentBal < 0
+                              ? 'bg-emerald-100 border-emerald-300'
+                              : currentBal === 0
+                              ? 'bg-slate-200 border-slate-300'
+                              : 'bg-rose-100 border-rose-300'
+                          }`}
+                        >
+                          <span
+                            className={`block text-[10px] font-bold ${
+                              currentBal < 0
+                                ? 'text-emerald-950'
+                                : currentBal === 0
+                                ? 'text-slate-900'
+                                : 'text-rose-950'
+                            }`}
+                          >
+                            {currentBal < 0
+                              ? 'موجودہ اضافی جمع (کریڈٹ بیلنس):'
+                              : currentBal === 0
+                              ? 'موجودہ کھاتہ اسٹیٹس:'
+                              : 'موجودہ واجب الادا بقایا قرض:'}
+                          </span>
+                          <span
+                            className={`font-mono font-black text-sm ${
+                              currentBal < 0
+                                ? 'text-emerald-950'
+                                : currentBal === 0
+                                ? 'text-slate-900'
+                                : 'text-rose-950'
+                            }`}
+                          >
+                            {currentBal < 0
+                              ? `+${Math.abs(currentBal).toLocaleString()} ${loanCurrency}`
+                              : currentBal === 0
+                              ? `0 ${loanCurrency} (بے باق)`
+                              : `${currentBal.toLocaleString()} ${loanCurrency}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Unified Ledger Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-slate-900 text-xs">
+                        <thead>
+                          <tr className="bg-slate-900 text-white font-bold text-center">
+                            <th className="border border-slate-700 py-2 px-2 w-10">نمبر شمار</th>
+                            <th className="border border-slate-700 py-2 px-2 w-24">تاریخ</th>
+                            <th className="border border-slate-700 py-2 px-2 w-24">رسید نمبر</th>
+                            <th className="border border-slate-700 py-2 px-2">قسم اندراج</th>
+                            <th className="border border-slate-700 py-2 px-2">تفصیل / وصول کنندہ</th>
+                            <th className="border border-slate-700 py-2 px-2">طریقہ</th>
+                            <th className="border border-slate-700 py-2 px-2 text-right bg-rose-950">رقم لی / قرض (+)</th>
+                            <th className="border border-slate-700 py-2 px-2 text-right bg-emerald-950">واپسی / جمع (-)</th>
+                            <th className="border border-slate-700 py-2 px-2 text-right bg-slate-800">صافی بیلنس</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(baseInitial > 0 || entries.length === 0) && (
+                            <tr className="bg-white">
+                              <td className="border border-slate-300 py-2 px-2 text-center font-mono font-bold text-slate-700">
+                                1
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 font-mono text-center text-slate-800">
+                                {loan.loanDate}
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-blue-900 text-center">
+                                {loan.receiptNo || loan.loanNo}
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 text-center">
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-urdu-heading bg-rose-100 text-rose-950 border border-rose-300">
+                                  ابتدائی قرض / ادھار (+)
+                                </span>
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 font-medium font-urdu-body text-slate-900">
+                                {loan.purpose || 'انفرادی قرضہ کھاتہ آغاز (ابتدائی رقم)'}
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 text-center text-[11px] font-bold text-slate-700">
+                                نقد (کیش)
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-rose-700">
+                                +{baseInitial.toLocaleString()}
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-slate-400">
+                                —
+                              </td>
+                              <td className="border border-slate-300 py-2 px-2 font-mono font-black text-right text-rose-800 bg-rose-50/50">
+                                <div>{baseInitial.toLocaleString()} {loanCurrency}</div>
+                                <span className="text-[10px] font-bold font-urdu-body block">واجب الادا</span>
+                              </td>
+                            </tr>
+                          )}
+                          {entries.map((rp, idx) => {
+                            const rowNum = (baseInitial > 0 || entries.length === 0 ? 2 : 1) + idx;
+                            const isAdditional = rp.entryType === 'additional_loan';
+                            const rowBal = rp.newBalance ?? 0;
+                            return (
+                              <tr key={rp.id || idx} className={rowNum % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
+                                <td className="border border-slate-300 py-2 px-2 text-center font-mono font-bold text-slate-700">
+                                  {rowNum}
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 font-mono text-center text-slate-800">
+                                  {rp.date}
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-blue-900 text-center">
+                                  {rp.receiptNo || '—'}
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 text-center">
+                                  <span
+                                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-urdu-heading ${
+                                      isAdditional
+                                        ? 'bg-rose-100 text-rose-950 border border-rose-300'
+                                        : 'bg-emerald-100 text-emerald-950 border border-emerald-300'
+                                    }`}
+                                  >
+                                    {isAdditional ? 'مزید قرض / رقم لی (+)' : 'واپسی / رقم جمع (-)'}
+                                  </span>
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 font-medium font-urdu-body text-slate-900">
+                                  <div>{rp.notes || (isAdditional ? 'مزید قرض رقم' : 'واپسی رقم وصول شدہ')}</div>
+                                  {rp.receivedBy && (
+                                    <div className="text-[11px] text-slate-600 font-bold mt-0.5">
+                                      {isAdditional ? 'وصول کنندہ: ' : 'جمع کرانے والا: '}
+                                      {rp.receivedBy}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 text-center text-[11px] font-bold text-slate-700">
+                                  {rp.paymentMethod === 'Cash' || !rp.paymentMethod
+                                    ? 'نقد (کیش)'
+                                    : rp.referenceNo || rp.paymentMethod}
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-rose-700">
+                                  {isAdditional ? `+${rp.amount.toLocaleString()}` : '—'}
+                                </td>
+                                <td className="border border-slate-300 py-2 px-2 font-mono font-bold text-right text-emerald-800">
+                                  {!isAdditional ? `-${rp.amount.toLocaleString()}` : '—'}
+                                </td>
+                                <td
+                                  className={`border border-slate-300 py-2 px-2 font-mono font-black text-right ${
+                                    rowBal < 0
+                                      ? 'text-emerald-800 bg-emerald-50/70'
+                                      : rowBal === 0
+                                      ? 'text-slate-800 bg-slate-50'
+                                      : 'text-rose-800 bg-rose-50/60'
+                                  }`}
+                                >
+                                  <div>
+                                    {rowBal < 0
+                                      ? `+${Math.abs(rowBal).toLocaleString()} ${loanCurrency}`
+                                      : `${rowBal.toLocaleString()} ${loanCurrency}`}
+                                  </div>
+                                  <span className="text-[10px] font-bold font-urdu-body block">
+                                    {rowBal < 0
+                                      ? 'اضافی جمع (کریڈٹ)'
+                                      : rowBal === 0
+                                      ? 'بے باق (صفر)'
+                                      : 'واجب الادا'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-200 font-extrabold text-slate-900 border-t-2 border-slate-900">
+                            <td colSpan={6} className="border border-slate-400 py-2.5 px-3 text-right">
+                              میزان کل (Grand Totals):
+                            </td>
+                            <td className="border border-slate-400 py-2.5 px-2 font-mono font-extrabold text-right text-rose-900">
+                              +{loan.originalAmount.toLocaleString()} {loanCurrency}
+                            </td>
+                            <td className="border border-slate-400 py-2.5 px-2 font-mono font-extrabold text-right text-emerald-900">
+                              -{loan.totalRepaid.toLocaleString()} {loanCurrency}
+                            </td>
+                            <td
+                              className={`border border-slate-400 py-2.5 px-2 font-mono font-black text-right text-sm ${
+                                currentBal < 0
+                                  ? 'text-emerald-950 bg-emerald-200'
+                                  : currentBal === 0
+                                  ? 'text-slate-950 bg-slate-300'
+                                  : 'text-rose-950 bg-rose-200'
+                              }`}
+                            >
+                              {currentBal < 0
+                                ? `+${Math.abs(currentBal).toLocaleString()} ${loanCurrency} (اضافی جمع)`
+                                : currentBal === 0
+                                ? `0 ${loanCurrency} (بے باق)`
+                                : `${currentBal.toLocaleString()} ${loanCurrency} (واجب الادا)`}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    {/* Footer Terms & Signatures */}
+                    <div className="pt-3 border-t-2 border-slate-900 space-y-4">
+                      <div className="bg-emerald-50 border border-emerald-600 rounded-lg py-2 px-4 text-center">
+                        <p className="font-musaffah-title text-sm font-bold text-emerald-950" dir="rtl">
+                          {resolveBrandText(
+                            settings.receiptFooterLoanUr,
+                            'ایگل ایس بی — ادھار کھاتہ و قرضہ واپسی باقاعدگی سے ادا کریں۔ آپ کے تعاون کا شکریہ!'
                           )}
                         </p>
                       </div>
@@ -2457,7 +2873,7 @@ export const ReceiptViewerModal: React.FC = () => {
                         </div>
                         <div className="text-center">
                           <div className="border-b border-slate-600 w-36 mb-1"></div>
-                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل اسٹار برانڈ'}</span>
+                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل ایس بی'}</span>
                         </div>
                       </div>
                     </div>
@@ -2859,7 +3275,10 @@ export const ReceiptViewerModal: React.FC = () => {
                           3. ادھار / لون کھاتہ تفصیلات (Udhar / Loans Ledger)
                         </h2>
                         <span className="text-xs font-mono font-bold text-rose-900">
-                          کل ادھار کھاتے: {effLoans.length} | واجب الادا بقایا: {totalLoansRemaining.toLocaleString()} {loanCurrency}
+                          کل ادھار کھاتے: {effLoans.length} |{' '}
+                          {totalLoansRemaining < 0
+                            ? `اضافی جمع (کریڈٹ): +${Math.abs(totalLoansRemaining).toLocaleString()} ${loanCurrency}`
+                            : `واجب الادا بقایا: ${totalLoansRemaining.toLocaleString()} ${loanCurrency}`}
                         </span>
                       </div>
 
@@ -2886,9 +3305,13 @@ export const ReceiptViewerModal: React.FC = () => {
                                 <div className="font-mono">
                                   <span>کل قرض: {loanItem.originalAmount.toLocaleString()} {loanItem.currency}</span>
                                   <span className="mx-2">|</span>
-                                  <span className="text-emerald-800">واپسی شدہ: {loanItem.totalRepaid.toLocaleString()}</span>
+                                  <span className="text-emerald-800">واپسی / جمع شدہ: {loanItem.totalRepaid.toLocaleString()}</span>
                                   <span className="mx-2">|</span>
-                                  <span className="text-rose-700 font-black">واجب الادا: {loanItem.remainingBalance.toLocaleString()} {loanItem.currency}</span>
+                                  <span className={`font-black ${loanItem.remainingBalance < 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                                    {loanItem.remainingBalance < 0
+                                      ? `اضافی جمع (کریڈٹ): +${Math.abs(loanItem.remainingBalance).toLocaleString()} ${loanItem.currency}`
+                                      : `واجب الادا: ${loanItem.remainingBalance.toLocaleString()} ${loanItem.currency}`}
+                                  </span>
                                 </div>
                               </div>
 
@@ -2896,27 +3319,39 @@ export const ReceiptViewerModal: React.FC = () => {
                                 <table className="w-full border-collapse text-[10px]">
                                   <thead>
                                     <tr className="bg-slate-50 text-slate-700 border-b border-slate-200">
-                                      <th className="py-1 px-2 text-center w-8">قسط</th>
-                                      <th className="py-1 px-2 text-center w-20">تاریخ واپسی</th>
+                                      <th className="py-1 px-2 text-center w-8">اندراج</th>
+                                      <th className="py-1 px-2 text-center w-20">تاریخ</th>
                                       <th className="py-1 px-2 text-center w-20">رسید نمبر</th>
-                                      <th className="py-1 px-2 text-right">ادا شدہ رقم</th>
+                                      <th className="py-1 px-2 text-center">قسم</th>
+                                      <th className="py-1 px-2 text-right">رقم</th>
                                       <th className="py-1 px-2 text-center">طریقہ</th>
                                       <th className="py-1 px-2">وصول کنندہ</th>
-                                      <th className="py-1 px-2 text-right">بقایا بعد از ادائیگی</th>
+                                      <th className="py-1 px-2 text-right">صافی بقایا</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
-                                    {loanItem.repayments.map((rp, rIdx) => (
-                                      <tr key={rp.id || rIdx}>
-                                        <td className="py-1 px-2 text-center font-mono">{rIdx + 1}</td>
-                                        <td className="py-1 px-2 text-center font-mono">{rp.date}</td>
-                                        <td className="py-1 px-2 text-center font-mono font-bold text-blue-900">{rp.receiptNo}</td>
-                                        <td className="py-1 px-2 text-right font-mono font-bold text-emerald-800">{rp.amount.toLocaleString()}</td>
-                                        <td className="py-1 px-2 text-center">{rp.paymentMethod || 'Cash'}</td>
-                                        <td className="py-1 px-2">{rp.receivedBy || 'آفس'}</td>
-                                        <td className="py-1 px-2 text-right font-mono font-bold">{rp.newBalance?.toLocaleString() || '—'}</td>
-                                      </tr>
-                                    ))}
+                                    {loanItem.repayments.map((rp, rIdx) => {
+                                      const isAdd = rp.entryType === 'additional_loan';
+                                      const nb = rp.newBalance ?? 0;
+                                      return (
+                                        <tr key={rp.id || rIdx}>
+                                          <td className="py-1 px-2 text-center font-mono">{rIdx + 1}</td>
+                                          <td className="py-1 px-2 text-center font-mono">{rp.date}</td>
+                                          <td className="py-1 px-2 text-center font-mono font-bold text-blue-900">{rp.receiptNo}</td>
+                                          <td className="py-1 px-2 text-center font-bold">
+                                            {isAdd ? '+ مزید قرض' : '- واپسی/جمع'}
+                                          </td>
+                                          <td className={`py-1 px-2 text-right font-mono font-bold ${isAdd ? 'text-rose-700' : 'text-emerald-800'}`}>
+                                            {isAdd ? '+' : '-'}{rp.amount.toLocaleString()}
+                                          </td>
+                                          <td className="py-1 px-2 text-center">{rp.paymentMethod || 'Cash'}</td>
+                                          <td className="py-1 px-2">{rp.receivedBy || 'آفس'}</td>
+                                          <td className={`py-1 px-2 text-right font-mono font-bold ${nb < 0 ? 'text-emerald-800' : ''}`}>
+                                            {nb < 0 ? `+${Math.abs(nb).toLocaleString()} (جمع)` : nb.toLocaleString()}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               )}
@@ -2932,7 +3367,7 @@ export const ReceiptViewerModal: React.FC = () => {
                         <p className="font-musaffah-title text-sm font-bold text-slate-900" dir="rtl">
                           {resolveBrandText(
                             settings.receiptFooterCashJamahUr,
-                            'ایگل اسٹار برانڈ — یہ گاہک کی تمام ٹرانزیکشنز، پیسہ جمع، منی ٹرانسفرز اور ادھار کھاتے کی مصدقہ سرکاری اسٹیٹمنٹ ہے۔'
+                            'ایگل ایس بی — یہ گاہک کی تمام ٹرانزیکشنز، پیسہ جمع، منی ٹرانسفرز اور ادھار کھاتے کی مصدقہ سرکاری اسٹیٹمنٹ ہے۔'
                           )}
                         </p>
                       </div>
@@ -2947,7 +3382,7 @@ export const ReceiptViewerModal: React.FC = () => {
                         </div>
                         <div className="text-center">
                           <div className="border-b border-slate-600 w-36 mb-1"></div>
-                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل اسٹار برانڈ'}</span>
+                          <span>مہر و تصدیق {settings.businessNameUr || 'ایگل ایس بی'}</span>
                         </div>
                       </div>
                     </div>
@@ -3168,7 +3603,7 @@ export const ReceiptViewerModal: React.FC = () => {
                               {prevBal.toLocaleString()} {amanatEntry?.currency || amanatAccount?.currency || 'PKR'}
                             </span>
                             <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                              جمع (انفرادی کھاتہ)
+                              {prevBal < 0 ? 'منفی واجب الادا (انفرادی کھاتہ)' : 'جمع (انفرادی کھاتہ)'}
                             </span>
                           </div>
 
@@ -3192,7 +3627,11 @@ export const ReceiptViewerModal: React.FC = () => {
                               {curBal.toLocaleString()} {amanatEntry?.currency || amanatAccount?.currency || 'PKR'}
                             </span>
                             <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                              {curBal > 0 ? 'جمع (قابل واپسی امانت)' : 'بے باق (صفر بیلنس)'}
+                              {curBal < 0
+                                ? 'منفی بقایا (واجب الادا رقم)'
+                                : curBal > 0
+                                ? 'جمع (قابل واپسی امانت)'
+                                : 'بے باق (صفر بیلنس)'}
                             </span>
                           </div>
                         </>
@@ -3200,18 +3639,20 @@ export const ReceiptViewerModal: React.FC = () => {
                         repayment ? (
                           <>
                             <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
-                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>سابقہ قرض بقایا :</span>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>
+                                {prevBal < 0 ? 'سابقہ اضافی جمع :' : 'سابقہ قرض بقایا :'}
+                              </span>
                               <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
-                                {prevBal.toLocaleString()} {loan.currency}
+                                {prevBal < 0 ? `+${Math.abs(prevBal).toLocaleString()}` : prevBal.toLocaleString()} {loan.currency}
                               </span>
                               <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                                واجب الادا (انفرادی کھاتہ)
+                                {prevBal < 0 ? 'اضافی جمع / کریڈٹ (انفرادی کھاتہ)' : 'واجب الادا (انفرادی کھاتہ)'}
                               </span>
                             </div>
 
                             <div className="text-base sm:text-lg font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7 }}>
                               <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>
-                                {repayment.entryType === 'additional_loan' ? 'مزید دی گئی رقم (+) :' : 'وصول شدہ واپسی رقم (-) :'}
+                                {repayment.entryType === 'additional_loan' ? 'مزید دی گئی رقم (+) :' : 'وصول شدہ واپسی / جمع (-) :'}
                               </span>
                               <span className="font-mono font-black text-base sm:text-lg text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
                                 {repayment.entryType === 'additional_loan' ? '+' : '-'}
@@ -3220,12 +3661,18 @@ export const ReceiptViewerModal: React.FC = () => {
                             </div>
 
                             <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
-                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>موجودہ بقایا قرض :</span>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>
+                                {curBal < 0 ? 'موجودہ اضافی جمع :' : 'موجودہ بقایا قرض :'}
+                              </span>
                               <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
-                                {curBal.toLocaleString()} {loan.currency}
+                                {curBal < 0 ? `+${Math.abs(curBal).toLocaleString()}` : curBal.toLocaleString()} {loan.currency}
                               </span>
                               <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                                {curBal > 0 ? 'واجب الادا (بقایا قرض)' : 'بے باق (مکمل ادا شدہ)'}
+                                {curBal < 0
+                                  ? 'اضافی جمع رقم (کریڈٹ بیلنس)'
+                                  : curBal > 0
+                                  ? 'واجب الادا (بقایا قرض)'
+                                  : 'بے باق (مکمل ادا شدہ)'}
                               </span>
                             </div>
                           </>
@@ -3251,12 +3698,21 @@ export const ReceiptViewerModal: React.FC = () => {
                             )}
 
                             <div className="text-lg sm:text-xl font-black flex items-center justify-start gap-3 flex-wrap" style={{ lineHeight: 1.7, paddingBottom: '4px' }}>
-                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>موجودہ بقایا قرض :</span>
+                              <span className="font-black text-slate-950 min-w-[140px]" style={{ color: '#000000' }}>
+                                {loan.remainingBalance < 0 ? 'موجودہ اضافی جمع :' : 'موجودہ بقایا قرض :'}
+                              </span>
                               <span className="font-mono font-black text-lg sm:text-xl text-slate-950" dir="ltr" style={{ color: '#000000', unicodeBidi: 'isolate' }}>
-                                {loan.remainingBalance.toLocaleString()} {loan.currency}
+                                {loan.remainingBalance < 0
+                                  ? `+${Math.abs(loan.remainingBalance).toLocaleString()}`
+                                  : loan.remainingBalance.toLocaleString()}{' '}
+                                {loan.currency}
                               </span>
                               <span className="text-slate-950 font-bold text-base sm:text-lg" style={{ color: '#000000' }}>
-                                {loan.remainingBalance > 0 ? 'واجب الادا (بقایا قرض)' : 'بے باق (مکمل ادا شدہ)'}
+                                {loan.remainingBalance < 0
+                                  ? 'اضافی جمع رقم (کریڈٹ بیلنس)'
+                                  : loan.remainingBalance > 0
+                                  ? 'واجب الادا (بقایا قرض)'
+                                  : 'بے باق (مکمل ادا شدہ)'}
                               </span>
                             </div>
                           </>
@@ -3334,7 +3790,7 @@ export const ReceiptViewerModal: React.FC = () => {
                         <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
                           {resolveBrandText(
                             settings.receiptFooterLoanUr,
-                            'ایگل اسٹار برانڈ — انفرادی ادھار / قرضہ کھاتہ رسید۔ آپ کے تعاون کا شکریہ!'
+                            'ایگل ایس بی — انفرادی ادھار / قرضہ کھاتہ رسید۔ آپ کے تعاون کا شکریہ!'
                           )}
                         </p>
                         {settings.receiptFooterLoanEn && (
@@ -3348,21 +3804,22 @@ export const ReceiptViewerModal: React.FC = () => {
                         <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
                           {resolveBrandText(
                             settings.receiptFooterCashJamahUr,
-                            'ایگل اسٹار برانڈ — انفرادی پیسہ جمع و واپسی کھاتہ رسید۔ آپ کے اعتماد کا شکریہ!'
+                            'ایگل ایس بی کیش جمع پر آپ کے اعتماد کا شکریہ۔ رقم بوقتِ ضرورت دستیاب ہے۔'
                           )}
                         </p>
-                        {settings.receiptFooterCashJamahEn && (
-                          <p className="text-[11px] font-semibold text-slate-700" dir="ltr" style={{ color: '#000000', lineHeight: 1.5 }}>
-                            {resolveBrandText(settings.receiptFooterCashJamahEn)}
-                          </p>
-                        )}
+                        {settings.receiptFooterCashJamahEn &&
+                          settings.receiptFooterCashJamahEn !== settings.receiptFooterCashJamahUr && (
+                            <p className="text-[11px] font-semibold text-slate-700" dir="ltr" style={{ color: '#000000', lineHeight: 1.5 }}>
+                              {resolveBrandText(settings.receiptFooterCashJamahEn)}
+                            </p>
+                          )}
                       </>
                     ) : depositEntry ? (
                       <>
                         <p className="font-musaffah-title text-sm sm:text-base font-bold text-slate-950" dir="rtl" style={{ color: '#000000', lineHeight: 1.75 }}>
                           {resolveBrandText(
                             settings.receiptFooterDepositUr,
-                            'ایگل اسٹار برانڈ — اسٹیشن کیش جمع و سیٹلمنٹ رسید۔ آپ کے اعتماد کا شکریہ!'
+                            'ایگل ایس بی — اسٹیشن کیش جمع و سیٹلمنٹ رسید۔ آپ کے اعتماد کا شکریہ!'
                           )}
                         </p>
                       </>
@@ -3392,7 +3849,7 @@ export const ReceiptViewerModal: React.FC = () => {
                     </div>
                     <div className="text-center font-bold text-slate-800" style={{ paddingBottom: '4px' }}>
                       <span className="inline-block font-musaffah-title" style={{ lineHeight: 1.7 }}>
-                        {settings.businessNameUr || 'ایگل اسٹار برانڈ'} ({settings.branchUr || settings.businessNameEn || 'Eagle Star Brand'})
+                        {settings.businessNameUr || 'ایگل ایس بی'} ({settings.branchUr || settings.businessNameEn || 'Eagle Star Brand'})
                       </span>
                     </div>
                     <div className="text-center" style={{ paddingBottom: '4px' }}>

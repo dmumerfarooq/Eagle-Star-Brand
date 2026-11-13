@@ -137,7 +137,7 @@ export const Sidebar: React.FC = () => {
                   {settings.businessNameEn || 'Eagle Star Brand'}
                 </span>
                 <span className="font-urdu-ui text-[13px] text-slate-950 font-bold -mt-0.5 truncate" dir="rtl">
-                  {settings.businessNameUr || 'ایگل اسٹار برانڈ'}
+                  {settings.businessNameUr || 'ایگل ایس بی'}
                 </span>
               </div>
             </div>
@@ -167,7 +167,7 @@ export const Sidebar: React.FC = () => {
             <button
               onClick={() => setSidebarOpen(true)}
               className="p-1 rounded-xl bg-white border border-slate-200 shadow-xs hover:border-emerald-400 transition cursor-pointer"
-              title={language === 'ur' ? 'ایگل اسٹار برانڈ - مینیو کھولیں' : 'Eagle Star Brand - Expand Menu'}
+              title={language === 'ur' ? 'ایگل ایس بی - مینیو کھولیں' : 'Eagle Star Brand - Expand Menu'}
             >
               <EagleStarLogo variant="icon" size="md" isDarkBackground={false} />
             </button>

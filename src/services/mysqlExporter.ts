@@ -282,7 +282,7 @@ export function generateMySQLDump(snapshot: FullAppStateSnapshot): string {
   \`agreed_terms\` TEXT DEFAULT NULL,
   \`total_repaid\` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   \`remaining_balance\` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
-  \`status\` ENUM('Outstanding', 'Partially Repaid', 'Fully Repaid', 'Overdue', 'Adjusted') NOT NULL DEFAULT 'Outstanding',
+  \`status\` VARCHAR(32) NOT NULL DEFAULT 'Outstanding',
   \`receipt_no\` VARCHAR(64) NOT NULL,
   \`notes\` TEXT DEFAULT NULL,
   \`updated_at\` VARCHAR(64) DEFAULT NULL,
@@ -302,6 +302,7 @@ export function generateMySQLDump(snapshot: FullAppStateSnapshot): string {
   \`receipt_no\` VARCHAR(64) NOT NULL,
   \`previous_balance\` DECIMAL(16, 2) DEFAULT 0.00,
   \`new_balance\` DECIMAL(16, 2) DEFAULT 0.00,
+  \`received_by\` VARCHAR(150) DEFAULT NULL,
   \`notes\` TEXT DEFAULT NULL,
   \`updated_at\` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (\`id\`),
@@ -487,7 +488,7 @@ export function generateMySQLDump(snapshot: FullAppStateSnapshot): string {
       if (ln.repayments && ln.repayments.length > 0) {
         for (const rp of ln.repayments) {
           lines.push(
-            `INSERT INTO \`loan_repayments\` (\`id\`, \`loan_id\`, \`repayment_date\`, \`entry_type\`, \`amount\`, \`currency\`, \`payment_method\`, \`reference_no\`, \`receipt_no\`, \`previous_balance\`, \`new_balance\`, \`notes\`, \`updated_at\`) VALUES (${sqlVal(rp.id)}, ${sqlVal(ln.id)}, ${sqlVal(rp.date)}, ${sqlVal(rp.entryType || 'repayment')}, ${sqlVal(rp.amount)}, ${sqlVal(rp.currency)}, ${sqlVal(rp.paymentMethod)}, ${sqlVal(rp.referenceNo)}, ${sqlVal(rp.receiptNo)}, ${sqlVal(rp.previousBalance || 0)}, ${sqlVal(rp.newBalance || 0)}, ${sqlVal(rp.notes)}, ${sqlVal(rp.updatedAt)}) ON DUPLICATE KEY UPDATE \`repayment_date\`=VALUES(\`repayment_date\`), \`entry_type\`=VALUES(\`entry_type\`), \`amount\`=VALUES(\`amount\`), \`payment_method\`=VALUES(\`payment_method\`), \`previous_balance\`=VALUES(\`previous_balance\`), \`new_balance\`=VALUES(\`new_balance\`), \`notes\`=VALUES(\`notes\`), \`updated_at\`=VALUES(\`updated_at\`);`
+            `INSERT INTO \`loan_repayments\` (\`id\`, \`loan_id\`, \`repayment_date\`, \`entry_type\`, \`amount\`, \`currency\`, \`payment_method\`, \`reference_no\`, \`receipt_no\`, \`previous_balance\`, \`new_balance\`, \`received_by\`, \`notes\`, \`updated_at\`) VALUES (${sqlVal(rp.id)}, ${sqlVal(ln.id)}, ${sqlVal(rp.date)}, ${sqlVal(rp.entryType || 'repayment')}, ${sqlVal(rp.amount)}, ${sqlVal(rp.currency)}, ${sqlVal(rp.paymentMethod)}, ${sqlVal(rp.referenceNo)}, ${sqlVal(rp.receiptNo)}, ${sqlVal(rp.previousBalance || 0)}, ${sqlVal(rp.newBalance || 0)}, ${sqlVal(rp.receivedBy)}, ${sqlVal(rp.notes)}, ${sqlVal(rp.updatedAt)}) ON DUPLICATE KEY UPDATE \`repayment_date\`=VALUES(\`repayment_date\`), \`entry_type\`=VALUES(\`entry_type\`), \`amount\`=VALUES(\`amount\`), \`payment_method\`=VALUES(\`payment_method\`), \`reference_no\`=VALUES(\`reference_no\`), \`receipt_no\`=VALUES(\`receipt_no\`), \`previous_balance\`=VALUES(\`previous_balance\`), \`new_balance\`=VALUES(\`new_balance\`), \`received_by\`=VALUES(\`received_by\`), \`notes\`=VALUES(\`notes\`), \`updated_at\`=VALUES(\`updated_at\`);`
           );
         }
       }

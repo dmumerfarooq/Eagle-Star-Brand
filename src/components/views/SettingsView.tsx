@@ -328,7 +328,8 @@ export const SettingsView: React.FC = () => {
   };
 
   const handleBackupFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
@@ -348,6 +349,16 @@ export const SettingsView: React.FC = () => {
           );
         }
       }
+      input.value = '';
+    };
+    reader.onerror = () => {
+      input.value = '';
+      showToast(
+        language === 'ur'
+          ? 'فائل پڑھنے میں خرابی پیش آئی!'
+          : 'Failed to read backup file!',
+        'error'
+      );
     };
     reader.readAsText(file);
   };
@@ -374,7 +385,7 @@ export const SettingsView: React.FC = () => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
     showToast(t('dataExported'), 'success');
   };
 
@@ -388,7 +399,7 @@ export const SettingsView: React.FC = () => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
     showToast(
       language === 'ur'
         ? 'مکمل MySQL ڈیٹا بیس ڈمپ (.SQL) فائل ڈاؤن لوڈ ہو گئی!'

@@ -36,7 +36,8 @@ const STORAGE_KEYS = {
   USERS: 'pk_dubai_users_v1',
   AUTH_USER: 'pk_dubai_auth_user_v1',
   STATIONS: 'pk_dubai_stations_v1',
-  SAVED_BANKS: 'pk_dubai_banks_v1'
+  SAVED_BANKS: 'pk_dubai_banks_v1',
+  DIRTY_KEYS: 'pk_dubai_dirty_keys_v1'
 };
 
 export const defaultSavedBanks: string[] = [
@@ -1034,6 +1035,164 @@ export const demoLedger: LedgerEntry[] = [
 
 class StorageService {
   private syncQueue: Promise<void> = Promise.resolve();
+  private pendingFlushStore: Record<string, unknown> = {};
+  private flushScheduled = false;
+  private keyVersions: Record<string, number> = {};
+
+  private static readonly SYNC_KEYS = [
+    STORAGE_KEYS.CUSTOMERS,
+    STORAGE_KEYS.RECEIVERS,
+    STORAGE_KEYS.TRANSFERS,
+    STORAGE_KEYS.LOANS,
+    STORAGE_KEYS.AMANAT,
+    STORAGE_KEYS.LEDGER,
+    STORAGE_KEYS.SETTINGS,
+    STORAGE_KEYS.USERS,
+    STORAGE_KEYS.STATIONS,
+    STORAGE_KEYS.SAVED_BANKS
+  ];
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      const flushHandler = () => {
+        this.flushBeaconOnUnload();
+      };
+      window.addEventListener('pagehide', flushHandler);
+      window.addEventListener('beforeunload', flushHandler);
+    }
+  }
+
+  private bumpKeyVersion(key: string): number {
+    const next = (this.keyVersions[key] || 0) + 1;
+    this.keyVersions[key] = next;
+    return next;
+  }
+
+  private getDirtyKeys(): Set<string> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.DIRTY_KEYS);
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? new Set(parsed.filter((k): k is string => typeof k === 'string'))
+        : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  private setDirtyKeys(keys: Set<string>): void {
+    try {
+      if (keys.size === 0) {
+        localStorage.removeItem(STORAGE_KEYS.DIRTY_KEYS);
+      } else {
+        localStorage.setItem(STORAGE_KEYS.DIRTY_KEYS, JSON.stringify(Array.from(keys)));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private markKeysDirty(keys: string[]): void {
+    if (keys.length === 0) return;
+    const dirty = this.getDirtyKeys();
+    for (const k of keys) {
+      dirty.add(k);
+    }
+    this.setDirtyKeys(dirty);
+  }
+
+  private unmarkKeysIfUnchanged(sentVersions: Record<string, number>): void {
+    const dirty = this.getDirtyKeys();
+    let changed = false;
+    for (const [k, ver] of Object.entries(sentVersions)) {
+      const stillPending = Object.prototype.hasOwnProperty.call(this.pendingFlushStore, k);
+      if (!stillPending && (this.keyVersions[k] || 0) === ver && dirty.delete(k)) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.setDirtyKeys(dirty);
+    }
+  }
+
+  private flushBeaconOnUnload(): void {
+    try {
+      const batch: Record<string, unknown> = { ...this.pendingFlushStore };
+      const dirty = this.getDirtyKeys();
+      for (const k of dirty) {
+        if (!Object.prototype.hasOwnProperty.call(batch, k) && StorageService.SYNC_KEYS.includes(k)) {
+          const raw = localStorage.getItem(k);
+          if (raw !== null) {
+            try {
+              batch[k] = JSON.parse(raw);
+            } catch {
+              // ignore corrupt JSON
+            }
+          }
+        }
+      }
+      if (Object.keys(batch).length === 0) return;
+
+      const payload = JSON.stringify({ store: batch });
+      if (
+        typeof navigator !== 'undefined' &&
+        typeof navigator.sendBeacon === 'function' &&
+        payload.length < 60000
+      ) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/state', blob);
+      }
+    } catch {
+      // ignore unload errors
+    }
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushScheduled) return;
+    this.flushScheduled = true;
+    const scheduleFn =
+      typeof queueMicrotask === 'function'
+        ? queueMicrotask
+        : (cb: () => void) => Promise.resolve().then(cb);
+    scheduleFn(() => {
+      this.flushPendingToServer();
+    });
+  }
+
+  private flushPendingToServer(): void {
+    this.flushScheduled = false;
+    const keys = Object.keys(this.pendingFlushStore);
+    if (keys.length === 0) return;
+
+    const batch = this.pendingFlushStore;
+    this.pendingFlushStore = {};
+
+    const sentVersions: Record<string, number> = {};
+    for (const k of keys) {
+      sentVersions[k] = this.keyVersions[k] || 0;
+    }
+
+    const payload = JSON.stringify({ store: batch });
+    const useKeepalive = payload.length < 60000;
+
+    this.syncQueue = this.syncQueue
+      .then(async () => {
+        try {
+          const res = await fetch('/api/state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            ...(useKeepalive ? { keepalive: true } : {})
+          });
+          if (res.ok) {
+            this.unmarkKeysIfUnchanged(sentVersions);
+          }
+        } catch {
+          // Offline or static fallback: dirtyKeys retains unpushed changes
+        }
+      });
+  }
 
   private load<T>(key: string, fallback: T): T {
     try {
@@ -1057,21 +1216,15 @@ class StorageService {
       const serialized = JSON.stringify(data);
       localStorage.setItem(key, serialized);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
-      if (key !== STORAGE_KEYS.AUTH_USER && key !== STORAGE_KEYS.LANG) {
-        const payload = JSON.stringify({ key, data });
-        const useKeepalive = payload.length < 60000;
-        this.syncQueue = this.syncQueue
-          .then(() =>
-            fetch('/api/state', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: payload,
-              ...(useKeepalive ? { keepalive: true } : {})
-            }).then(() => undefined)
-          )
-          .catch(() => {
-            // Offline or static fallback: localStorage remains authoritative
-          });
+      if (
+        key !== STORAGE_KEYS.AUTH_USER &&
+        key !== STORAGE_KEYS.LANG &&
+        key !== STORAGE_KEYS.DIRTY_KEYS
+      ) {
+        this.bumpKeyVersion(key);
+        this.markKeysDirty([key]);
+        this.pendingFlushStore[key] = data;
+        this.scheduleFlush();
       }
     } catch (e) {
       console.error(`Error saving to localStorage key ${key}:`, e);
@@ -1080,29 +1233,65 @@ class StorageService {
 
   async syncWithServer(): Promise<boolean> {
     try {
+      if (this.flushScheduled || Object.keys(this.pendingFlushStore).length > 0) {
+        this.flushPendingToServer();
+      }
+      await this.syncQueue;
+
+      // Step 1: If localStorage has unacknowledged dirty keys (e.g. from an interrupted delete/save),
+      // push those local keys to the server BEFORE pulling so local deletes never revert.
+      const dirtyKeys = this.getDirtyKeys();
+      if (dirtyKeys.size > 0) {
+        const dirtyStore: Record<string, unknown> = {};
+        const sentVersions: Record<string, number> = {};
+        for (const k of dirtyKeys) {
+          if (!StorageService.SYNC_KEYS.includes(k)) continue;
+          const raw = localStorage.getItem(k);
+          if (raw !== null) {
+            try {
+              dirtyStore[k] = JSON.parse(raw);
+              sentVersions[k] = this.keyVersions[k] || 0;
+            } catch {
+              // ignore corrupt entry
+            }
+          }
+        }
+        if (Object.keys(dirtyStore).length > 0) {
+          let pushOk = false;
+          await (this.syncQueue = this.syncQueue.then(async () => {
+            try {
+              const pushRes = await fetch('/api/state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ store: dirtyStore })
+              });
+              pushOk = pushRes.ok;
+              if (pushOk) {
+                this.unmarkKeysIfUnchanged(sentVersions);
+              }
+            } catch {
+              pushOk = false;
+            }
+          }));
+          if (!pushOk) {
+            return false;
+          }
+        }
+      }
+
+      // Step 2: Pull authoritative server state for all non-dirty keys
       const res = await fetch('/api/state', { cache: 'no-store' });
       if (!res.ok) return false;
       const payload = await res.json();
       const serverStore = payload?.store as Record<string, unknown> | undefined;
       if (!serverStore) return false;
 
-      const syncKeys = [
-        STORAGE_KEYS.CUSTOMERS,
-        STORAGE_KEYS.RECEIVERS,
-        STORAGE_KEYS.TRANSFERS,
-        STORAGE_KEYS.LOANS,
-        STORAGE_KEYS.AMANAT,
-        STORAGE_KEYS.LEDGER,
-        STORAGE_KEYS.SETTINGS,
-        STORAGE_KEYS.USERS,
-        STORAGE_KEYS.STATIONS,
-        STORAGE_KEYS.SAVED_BANKS
-      ];
-
+      const syncKeys = StorageService.SYNC_KEYS;
+      const stillDirty = this.getDirtyKeys();
       const hasServerData = syncKeys.some(k => serverStore[k] !== undefined);
       if (hasServerData) {
         for (const k of syncKeys) {
-          if (serverStore[k] !== undefined) {
+          if (serverStore[k] !== undefined && !stillDirty.has(k)) {
             localStorage.setItem(k, JSON.stringify(serverStore[k]));
           }
         }
@@ -1118,31 +1307,41 @@ class StorageService {
   }
 
   async pushAllToServer(): Promise<boolean> {
-    try {
-      const fullStore: Record<string, unknown> = {
-        [STORAGE_KEYS.CUSTOMERS]: this.getCustomers(),
-        [STORAGE_KEYS.RECEIVERS]: this.getReceivers(),
-        [STORAGE_KEYS.TRANSFERS]: this.getTransfers(),
-        [STORAGE_KEYS.LOANS]: this.getLoans(),
-        [STORAGE_KEYS.AMANAT]: this.getAmanatAccounts(),
-        [STORAGE_KEYS.LEDGER]: this.getLedgerEntries(),
-        [STORAGE_KEYS.SETTINGS]: this.getSettings(),
-        [STORAGE_KEYS.USERS]: this.getUsers(),
-        [STORAGE_KEYS.STATIONS]: this.getStations(),
-        [STORAGE_KEYS.SAVED_BANKS]: this.getSavedBanks()
-      };
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store: fullStore })
-      });
-      if (res.ok) {
-        localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
-      }
-      return res.ok;
-    } catch {
-      return false;
+    const fullStore: Record<string, unknown> = {
+      [STORAGE_KEYS.CUSTOMERS]: this.getCustomers(),
+      [STORAGE_KEYS.RECEIVERS]: this.getReceivers(),
+      [STORAGE_KEYS.TRANSFERS]: this.getTransfers(),
+      [STORAGE_KEYS.LOANS]: this.getLoans(),
+      [STORAGE_KEYS.AMANAT]: this.getAmanatAccounts(),
+      [STORAGE_KEYS.LEDGER]: this.getLedgerEntries(),
+      [STORAGE_KEYS.SETTINGS]: this.getSettings(),
+      [STORAGE_KEYS.USERS]: this.getUsers(),
+      [STORAGE_KEYS.STATIONS]: this.getStations(),
+      [STORAGE_KEYS.SAVED_BANKS]: this.getSavedBanks()
+    };
+    const sentVersions: Record<string, number> = {};
+    for (const k of Object.keys(fullStore)) {
+      sentVersions[k] = this.keyVersions[k] || 0;
     }
+
+    let ok = false;
+    await (this.syncQueue = this.syncQueue.then(async () => {
+      try {
+        const res = await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store: fullStore })
+        });
+        ok = res.ok;
+        if (ok) {
+          localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+          this.unmarkKeysIfUnchanged(sentVersions);
+        }
+      } catch {
+        ok = false;
+      }
+    }));
+    return ok;
   }
 
   // Customers
@@ -1644,13 +1843,17 @@ class StorageService {
       );
       if (st) {
         const stEntries = st.entries || [];
-        const hasLedgerEntry = stEntries.some(e => e.referenceNo === tr.orderNumber);
+        const hasLedgerEntry = stEntries.some(
+          e => e.referenceNo === tr.orderNumber || (Boolean(tr.receiptNumber) && e.receiptNo === tr.receiptNumber)
+        );
         if (tr.stationBalanceDeducted || hasLedgerEntry) {
           const baseline =
             stEntries.length > 0
               ? stEntries[0].previousBalancePKR
               : (st.currentBalancePKR || 0) + (tr.netPayablePKR || tr.amountPKR || 0);
-          const remainingEntries = stEntries.filter(e => e.referenceNo !== tr.orderNumber);
+          const remainingEntries = stEntries.filter(
+            e => e.referenceNo !== tr.orderNumber && (!tr.receiptNumber || e.receiptNo !== tr.receiptNumber)
+          );
           const recalc = this.recalculateStationLedger(remainingEntries, baseline);
           this.saveStation({
             ...st,
@@ -3041,7 +3244,35 @@ class StorageService {
   async importAllData(jsonString: string): Promise<boolean> {
     try {
       const data = JSON.parse(jsonString);
-      if (!data || typeof data !== 'object') return false;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+
+      const hasValidRecognizedKey =
+        Array.isArray(data.customers) ||
+        Array.isArray(data.pk_dubai_customers_v1) ||
+        Array.isArray(data.receivers) ||
+        Array.isArray(data.pk_dubai_receivers_v1) ||
+        Array.isArray(data.transfers) ||
+        Array.isArray(data.pk_dubai_transfers_v1) ||
+        Array.isArray(data.loans) ||
+        Array.isArray(data.pk_dubai_loans_v1) ||
+        Array.isArray(data.amanat) ||
+        Array.isArray(data.amanatAccounts) ||
+        Array.isArray(data.pk_dubai_amanat_v1) ||
+        Array.isArray(data.ledger) ||
+        Array.isArray(data.cashLedger) ||
+        Array.isArray(data.pk_dubai_ledger_v1) ||
+        (data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings)) ||
+        (data.businessSettings && typeof data.businessSettings === 'object' && !Array.isArray(data.businessSettings)) ||
+        (data.pk_dubai_settings_v1 && typeof data.pk_dubai_settings_v1 === 'object' && !Array.isArray(data.pk_dubai_settings_v1)) ||
+        Array.isArray(data.users) ||
+        Array.isArray(data.pk_dubai_users_v1) ||
+        Array.isArray(data.stations) ||
+        Array.isArray(data.pk_dubai_stations_v1) ||
+        Array.isArray(data.savedBanks) ||
+        Array.isArray(data.banks) ||
+        Array.isArray(data.pk_dubai_banks_v1);
+
+      if (!hasValidRecognizedKey) return false;
 
       const customers = Array.isArray(data.customers)
         ? data.customers
@@ -3061,19 +3292,32 @@ class StorageService {
         ? data.pk_dubai_transfers_v1
         : this.getTransfers();
 
-      const loans = Array.isArray(data.loans)
+      const rawLoans: Loan[] = Array.isArray(data.loans)
         ? data.loans
         : Array.isArray(data.pk_dubai_loans_v1)
         ? data.pk_dubai_loans_v1
         : this.getLoans();
+      const loans = rawLoans.map(l => this.recalculateLoanBalances(l));
 
-      const amanat = Array.isArray(data.amanat)
+      const rawAmanat: AmanatAccount[] = Array.isArray(data.amanat)
         ? data.amanat
         : Array.isArray(data.amanatAccounts)
         ? data.amanatAccounts
         : Array.isArray(data.pk_dubai_amanat_v1)
         ? data.pk_dubai_amanat_v1
         : this.getAmanatAccounts();
+      const amanat = rawAmanat.map(acc => {
+        const entries = acc.entries || [];
+        if (entries.length === 0) {
+          return { ...acc, entries: [], currentBalance: Number(acc.currentBalance || 0) };
+        }
+        const recalc = this.recalculateAmanatEntries(entries);
+        return {
+          ...acc,
+          currentBalance: recalc.currentBalance,
+          entries: recalc.entries
+        };
+      });
 
       const ledger = Array.isArray(data.ledger)
         ? data.ledger
@@ -3084,11 +3328,11 @@ class StorageService {
         : this.getLedgerEntries();
 
       const rawSettings =
-        data.settings && typeof data.settings === 'object'
+        data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings)
           ? data.settings
-          : data.businessSettings && typeof data.businessSettings === 'object'
+          : data.businessSettings && typeof data.businessSettings === 'object' && !Array.isArray(data.businessSettings)
           ? data.businessSettings
-          : data.pk_dubai_settings_v1 && typeof data.pk_dubai_settings_v1 === 'object'
+          : data.pk_dubai_settings_v1 && typeof data.pk_dubai_settings_v1 === 'object' && !Array.isArray(data.pk_dubai_settings_v1)
           ? data.pk_dubai_settings_v1
           : this.getSettings();
       const settings = this.migrateBrandSettings({ ...defaultSettings, ...rawSettings }).settings;
@@ -3112,6 +3356,9 @@ class StorageService {
         : Array.isArray(data.pk_dubai_banks_v1)
         ? data.pk_dubai_banks_v1
         : this.getSavedBanks();
+
+      this.pendingFlushStore = {};
+      this.flushScheduled = false;
 
       localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
       localStorage.setItem(STORAGE_KEYS.RECEIVERS, JSON.stringify(receivers));
@@ -3138,15 +3385,27 @@ class StorageService {
         [STORAGE_KEYS.SAVED_BANKS]: savedBanks
       };
 
-      try {
-        await fetch('/api/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ store: fullStore })
-        });
-      } catch {
-        // local storage updated
+      const sentVersions: Record<string, number> = {};
+      const keys = Object.keys(fullStore);
+      for (const k of keys) {
+        sentVersions[k] = this.bumpKeyVersion(k);
       }
+      this.markKeysDirty(keys);
+
+      await (this.syncQueue = this.syncQueue.then(async () => {
+        try {
+          const res = await fetch('/api/state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ store: fullStore })
+          });
+          if (res.ok) {
+            this.unmarkKeysIfUnchanged(sentVersions);
+          }
+        } catch {
+          // local storage updated; dirtyKeys keeps pending state
+        }
+      }));
 
       return true;
     } catch (e) {
@@ -3156,6 +3415,9 @@ class StorageService {
   }
 
   async clearAllData(): Promise<void> {
+    this.pendingFlushStore = {};
+    this.flushScheduled = false;
+
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.RECEIVERS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify([]));
@@ -3182,18 +3444,33 @@ class StorageService {
       [STORAGE_KEYS.STATIONS]: stations
     };
 
-    try {
-      await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store: fullStore })
-      });
-    } catch {
-      // offline fallback
+    const sentVersions: Record<string, number> = {};
+    const keys = Object.keys(fullStore);
+    for (const k of keys) {
+      sentVersions[k] = this.bumpKeyVersion(k);
     }
+    this.markKeysDirty(keys);
+
+    await (this.syncQueue = this.syncQueue.then(async () => {
+      try {
+        const res = await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store: fullStore })
+        });
+        if (res.ok) {
+          this.unmarkKeysIfUnchanged(sentVersions);
+        }
+      } catch {
+        // offline fallback
+      }
+    }));
   }
 
   async resetToDemo(): Promise<void> {
+    this.pendingFlushStore = {};
+    this.flushScheduled = false;
+
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(demoCustomers));
     localStorage.setItem(STORAGE_KEYS.RECEIVERS, JSON.stringify(demoReceivers));
     localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify(demoTransfers));
@@ -3219,15 +3496,27 @@ class StorageService {
       [STORAGE_KEYS.SAVED_BANKS]: defaultSavedBanks
     };
 
-    try {
-      await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ store: fullStore })
-      });
-    } catch {
-      // offline fallback
+    const sentVersions: Record<string, number> = {};
+    const keys = Object.keys(fullStore);
+    for (const k of keys) {
+      sentVersions[k] = this.bumpKeyVersion(k);
     }
+    this.markKeysDirty(keys);
+
+    await (this.syncQueue = this.syncQueue.then(async () => {
+      try {
+        const res = await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ store: fullStore })
+        });
+        if (res.ok) {
+          this.unmarkKeysIfUnchanged(sentVersions);
+        }
+      } catch {
+        // offline fallback
+      }
+    }));
   }
 
   exportMySQLDump(): string {

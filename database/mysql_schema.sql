@@ -1,5 +1,5 @@
 -- ============================================================================
--- EAGLE STAR BRAND (ایگل اسٹار برانڈ)
+-- EAGLE STAR BRAND (ایگل ایس بی)
 -- Complete MySQL 8.0+ / MariaDB 10.5+ Relational Database Schema
 -- Money Transfer, Station Ledger, Cash Jama (Amanat) & Khata System
 -- Supports Multi-Currency (PKR, AED, SAR, USD, OMR, GBP & Custom Currencies),
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 CREATE TABLE IF NOT EXISTS `business_settings` (
   `id` INT NOT NULL DEFAULT 1,
   `business_name_en` VARCHAR(200) NOT NULL DEFAULT 'Eagle Star Brand',
-  `business_name_ur` VARCHAR(200) NOT NULL DEFAULT 'ایگل اسٹار برانڈ',
+  `business_name_ur` VARCHAR(200) NOT NULL DEFAULT 'ایگل ایس بی',
   `branch_en` VARCHAR(200) DEFAULT NULL,
   `branch_ur` VARCHAR(200) DEFAULT NULL,
   `address_en` VARCHAR(300) DEFAULT NULL,
@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS `loans` (
   `agreed_terms` TEXT DEFAULT NULL,
   `total_repaid` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
   `remaining_balance` DECIMAL(16, 2) NOT NULL DEFAULT 0.00,
-  `status` ENUM('Outstanding', 'Partially Repaid', 'Fully Repaid', 'Overdue', 'Adjusted') NOT NULL DEFAULT 'Outstanding',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'Outstanding',
   `receipt_no` VARCHAR(64) NOT NULL,
   `notes` TEXT DEFAULT NULL,
   `updated_at` VARCHAR(64) DEFAULT NULL,
@@ -297,6 +297,7 @@ CREATE TABLE IF NOT EXISTS `loan_repayments` (
   `receipt_no` VARCHAR(64) NOT NULL,
   `previous_balance` DECIMAL(16, 2) DEFAULT 0.00,
   `new_balance` DECIMAL(16, 2) DEFAULT 0.00,
+  `received_by` VARCHAR(150) DEFAULT NULL,
   `notes` TEXT DEFAULT NULL,
   `updated_at` VARCHAR(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -432,11 +433,13 @@ INSERT INTO `business_settings` (
   `order_number_prefix`,
   `default_language`,
   `receipt_footer_en`,
-  `receipt_footer_ur`
+  `receipt_footer_ur`,
+  `receipt_footer_cash_jamah_ur`,
+  `receipt_footer_cash_jamah_en`
 ) VALUES (
   1,
   'Eagle Star Brand',
-  'ایگل اسٹار برانڈ',
+  'ایگل ایس بی',
   'Deira Branch, Dubai, UAE',
   'دیرہ برانچ، دبئی، متحدہ عرب امارات',
   'Shop 14, Al-Sabkha Road, Deira, Dubai',
@@ -454,7 +457,9 @@ INSERT INTO `business_settings` (
   '109',
   'en',
   'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔',
-  'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔'
+  'اپنی رقم 5 دنوں کے اندر وصول کر لیں، بصورتِ دیگر ہم ذمہ دار نہیں ہوں گے۔',
+  'ایگل ایس بی کیش جمع پر آپ کے اعتماد کا شکریہ۔ رقم بوقتِ ضرورت دستیاب ہے۔',
+  ''
 )
 ON DUPLICATE KEY UPDATE
   `business_name_en` = VALUES(`business_name_en`),

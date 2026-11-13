@@ -42,7 +42,9 @@ function writeDiskStore(store: StoreMap): void {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2), 'utf-8');
+    const tmpFile = `${DB_FILE}.tmp.${process.pid}`;
+    fs.writeFileSync(tmpFile, JSON.stringify(store, null, 2), 'utf-8');
+    fs.renameSync(tmpFile, DB_FILE);
   } catch (err) {
     console.error('Error writing server disk store:', err);
   }
@@ -81,7 +83,7 @@ async function ensureMySQLRelationalTables(pool: any): Promise<void> {
     CREATE TABLE IF NOT EXISTS \`business_settings\` (
       \`id\` INT NOT NULL DEFAULT 1,
       \`business_name_en\` VARCHAR(200) NOT NULL DEFAULT 'Eagle Star Brand',
-      \`business_name_ur\` VARCHAR(200) NOT NULL DEFAULT 'ایگل اسٹار برانڈ',
+      \`business_name_ur\` VARCHAR(200) NOT NULL DEFAULT 'ایگل ایس بی',
       \`branch_en\` VARCHAR(200) DEFAULT NULL,
       \`branch_ur\` VARCHAR(200) DEFAULT NULL,
       \`address_en\` VARCHAR(300) DEFAULT NULL,
@@ -290,6 +292,7 @@ async function ensureMySQLRelationalTables(pool: any): Promise<void> {
       \`receipt_no\` VARCHAR(64) NOT NULL,
       \`previous_balance\` DECIMAL(16, 2) DEFAULT 0.00,
       \`new_balance\` DECIMAL(16, 2) DEFAULT 0.00,
+      \`received_by\` VARCHAR(150) DEFAULT NULL,
       \`notes\` TEXT DEFAULT NULL,
       \`updated_at\` VARCHAR(64) DEFAULT NULL,
       PRIMARY KEY (\`id\`)
@@ -351,6 +354,7 @@ async function ensureMySQLRelationalTables(pool: any): Promise<void> {
     "ALTER TABLE `business_settings` ADD COLUMN `currencies_json` LONGTEXT DEFAULT NULL",
     "ALTER TABLE `business_settings` ADD COLUMN `receipt_header_title_ur` VARCHAR(150) DEFAULT 'رسید آرڈر'",
     "ALTER TABLE `business_settings` ADD COLUMN `receipt_customer_label_ur` VARCHAR(150) DEFAULT 'مصفح کسٹمر نمبر'",
+    "ALTER TABLE `business_settings` ADD COLUMN `custom_logo_url` LONGTEXT DEFAULT NULL",
     "ALTER TABLE `money_transfers` ADD COLUMN `input_currency` VARCHAR(16) NOT NULL DEFAULT 'AED'",
     "ALTER TABLE `money_transfers` ADD COLUMN `updated_at` VARCHAR(64) DEFAULT NULL",
     "ALTER TABLE `station_ledger_entries` ADD COLUMN `amount_aed` DECIMAL(16, 2) DEFAULT 0.00",
@@ -358,9 +362,11 @@ async function ensureMySQLRelationalTables(pool: any): Promise<void> {
     "ALTER TABLE `station_ledger_entries` ADD COLUMN `updated_at` VARCHAR(64) DEFAULT NULL",
     "ALTER TABLE `loans` ADD COLUMN `initial_amount` DECIMAL(16, 2) DEFAULT 0.00",
     "ALTER TABLE `loans` ADD COLUMN `updated_at` VARCHAR(64) DEFAULT NULL",
+    "ALTER TABLE `loans` MODIFY COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'Outstanding'",
     "ALTER TABLE `loan_repayments` ADD COLUMN `entry_type` VARCHAR(32) NOT NULL DEFAULT 'repayment'",
     "ALTER TABLE `loan_repayments` ADD COLUMN `previous_balance` DECIMAL(16, 2) DEFAULT 0.00",
     "ALTER TABLE `loan_repayments` ADD COLUMN `new_balance` DECIMAL(16, 2) DEFAULT 0.00",
+    "ALTER TABLE `loan_repayments` ADD COLUMN `received_by` VARCHAR(150) DEFAULT NULL",
     "ALTER TABLE `loan_repayments` ADD COLUMN `updated_at` VARCHAR(64) DEFAULT NULL",
     "ALTER TABLE `amanat_entries` ADD COLUMN `updated_at` VARCHAR(64) DEFAULT NULL",
     "ALTER TABLE `cash_ledger` ADD COLUMN `updated_at` VARCHAR(64) DEFAULT NULL"
@@ -461,7 +467,7 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
           \`custom_logo_url\`=VALUES(\`custom_logo_url\`)`,
         [
           s.businessNameEn || 'Eagle Star Brand',
-          s.businessNameUr || 'ایگل اسٹار برانڈ',
+          s.businessNameUr || 'ایگل ایس بی',
           s.branchEn || null,
           s.branchUr || null,
           s.addressEn || null,
@@ -734,33 +740,32 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
       for (const c of data) {
         await pool.query(
           `INSERT INTO \`customers\` (
-            \`id\`, \`customer_code\`, \`name\`, \`phone\`, \`whatsapp\`, \`emirates_id\`, \`passport_no\`,
-            \`address\`, \`city\`, \`country\`, \`notes\`, \`created_at\`
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            \`id\`, \`customer_code\`, \`name\`, \`name_ur\`, \`phone\`, \`secondary_phone\`,
+            \`address\`, \`city\`, \`country\`, \`date_added\`, \`notes\`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE
             \`customer_code\`=VALUES(\`customer_code\`),
             \`name\`=VALUES(\`name\`),
+            \`name_ur\`=VALUES(\`name_ur\`),
             \`phone\`=VALUES(\`phone\`),
-            \`whatsapp\`=VALUES(\`whatsapp\`),
-            \`emirates_id\`=VALUES(\`emirates_id\`),
-            \`passport_no\`=VALUES(\`passport_no\`),
+            \`secondary_phone\`=VALUES(\`secondary_phone\`),
             \`address\`=VALUES(\`address\`),
             \`city\`=VALUES(\`city\`),
             \`country\`=VALUES(\`country\`),
+            \`date_added\`=VALUES(\`date_added\`),
             \`notes\`=VALUES(\`notes\`)`,
           [
             c.id,
             c.customerCode || c.code || c.id,
-            c.name,
-            c.phone,
+            c.name || '',
+            c.nameUr || null,
+            c.phone || '',
             c.secondaryPhone || c.whatsapp || null,
-            c.emiratesId || null,
-            c.passportNo || null,
             c.address || null,
             c.city || null,
-            c.country || null,
-            c.notes || null,
-            c.dateAdded || c.createdAt || null
+            c.country || 'UAE',
+            c.dateAdded || new Date().toISOString().split('T')[0],
+            c.notes || null
           ]
         );
       }
@@ -774,42 +779,41 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
       for (const r of data) {
         await pool.query(
           `INSERT INTO \`receivers\` (
-            \`id\`, \`receiver_code\`, \`name\`, \`phone\`, \`cnic\`, \`address\`, \`city\`,
-            \`station\`, \`relationship\`, \`linked_sender_id\`, \`preferred_payout_method\`,
-            \`bank_name\`, \`account_title\`, \`account_number\`, \`notes\`, \`created_at\`
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            \`id\`, \`customer_id\`, \`name\`, \`name_ur\`, \`phone\`, \`address\`, \`city\`,
+            \`province\`, \`station\`, \`country\`, \`cnic\`, \`bank_name\`, \`account_number\`,
+            \`payout_method\`, \`notes\`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE
-            \`receiver_code\`=VALUES(\`receiver_code\`),
+            \`customer_id\`=VALUES(\`customer_id\`),
             \`name\`=VALUES(\`name\`),
+            \`name_ur\`=VALUES(\`name_ur\`),
             \`phone\`=VALUES(\`phone\`),
-            \`cnic\`=VALUES(\`cnic\`),
             \`address\`=VALUES(\`address\`),
             \`city\`=VALUES(\`city\`),
+            \`province\`=VALUES(\`province\`),
             \`station\`=VALUES(\`station\`),
-            \`relationship\`=VALUES(\`relationship\`),
-            \`linked_sender_id\`=VALUES(\`linked_sender_id\`),
-            \`preferred_payout_method\`=VALUES(\`preferred_payout_method\`),
+            \`country\`=VALUES(\`country\`),
+            \`cnic\`=VALUES(\`cnic\`),
             \`bank_name\`=VALUES(\`bank_name\`),
-            \`account_title\`=VALUES(\`account_title\`),
             \`account_number\`=VALUES(\`account_number\`),
+            \`payout_method\`=VALUES(\`payout_method\`),
             \`notes\`=VALUES(\`notes\`)`,
           [
             r.id,
-            r.code || r.id,
-            r.name,
-            r.phone,
-            r.cnic || null,
+            r.customerId || r.linkedSenderId || null,
+            r.name || '',
+            r.nameUr || null,
+            r.phone || '',
             r.address || null,
             r.city || null,
+            r.province || null,
             r.station || '',
-            r.relationship || null,
-            r.customerId || r.linkedSenderId || null,
-            r.payoutMethod || r.preferredPayoutMethod || 'Cash',
+            r.country || 'Pakistan',
+            r.cnic || null,
             r.bankName || null,
-            r.accountTitle || null,
             r.accountNumber || null,
-            r.notes || null,
-            r.createdAt || null
+            r.payoutMethod || r.preferredPayoutMethod || 'Cash',
+            r.notes || null
           ]
         );
       }
@@ -826,51 +830,48 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
       for (const l of data) {
         await pool.query(
           `INSERT INTO \`loans\` (
-            \`id\`, \`loan_no\`, \`receipt_no\`, \`borrower_id\`, \`borrower_name\`, \`borrower_phone\`,
-            \`borrower_address\`, \`city\`, \`station\`, \`currency\`, \`initial_amount\`, \`original_amount\`,
-            \`total_repaid\`, \`remaining_balance\`, \`loan_date\`, \`due_date\`, \`purpose\`,
-            \`guarantor_name\`, \`guarantor_phone\`, \`status\`, \`notes\`, \`updated_at\`
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            \`id\`, \`loan_no\`, \`borrower_name\`, \`borrower_phone\`, \`borrower_address\`,
+            \`loan_date\`, \`initial_amount\`, \`original_amount\`, \`currency\`, \`due_date\`,
+            \`expected_duration\`, \`purpose\`, \`agreed_terms\`, \`total_repaid\`, \`remaining_balance\`,
+            \`status\`, \`receipt_no\`, \`notes\`, \`updated_at\`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE
+            \`loan_no\`=VALUES(\`loan_no\`),
             \`borrower_name\`=VALUES(\`borrower_name\`),
             \`borrower_phone\`=VALUES(\`borrower_phone\`),
             \`borrower_address\`=VALUES(\`borrower_address\`),
-            \`city\`=VALUES(\`city\`),
-            \`station\`=VALUES(\`station\`),
-            \`currency\`=VALUES(\`currency\`),
+            \`loan_date\`=VALUES(\`loan_date\`),
             \`initial_amount\`=VALUES(\`initial_amount\`),
             \`original_amount\`=VALUES(\`original_amount\`),
+            \`currency\`=VALUES(\`currency\`),
+            \`due_date\`=VALUES(\`due_date\`),
+            \`expected_duration\`=VALUES(\`expected_duration\`),
+            \`purpose\`=VALUES(\`purpose\`),
+            \`agreed_terms\`=VALUES(\`agreed_terms\`),
             \`total_repaid\`=VALUES(\`total_repaid\`),
             \`remaining_balance\`=VALUES(\`remaining_balance\`),
-            \`loan_date\`=VALUES(\`loan_date\`),
-            \`due_date\`=VALUES(\`due_date\`),
-            \`purpose\`=VALUES(\`purpose\`),
-            \`guarantor_name\`=VALUES(\`guarantor_name\`),
-            \`guarantor_phone\`=VALUES(\`guarantor_phone\`),
             \`status\`=VALUES(\`status\`),
+            \`receipt_no\`=VALUES(\`receipt_no\`),
             \`notes\`=VALUES(\`notes\`),
             \`updated_at\`=VALUES(\`updated_at\`)`,
           [
             l.id,
             l.loanNo || l.id,
-            l.receiptNo || null,
-            l.borrowerId || null,
-            l.borrowerName,
+            l.borrowerName || '',
             l.borrowerPhone || '',
             l.borrowerAddress || null,
-            l.city || null,
-            l.station || null,
-            l.currency || 'AED',
+            l.loanDate || new Date().toISOString().split('T')[0],
             Number(l.initialAmount ?? l.originalAmount ?? 0),
             Number(l.originalAmount || 0),
+            l.currency || 'PKR',
+            l.dueDate || l.loanDate || '',
+            l.expectedDuration || '1_month',
+            l.purpose || null,
+            l.agreedTerms || null,
             Number(l.totalRepaid || 0),
             Number(l.remainingBalance || 0),
-            l.loanDate,
-            l.dueDate || null,
-            l.purpose || null,
-            l.guarantorName || null,
-            l.guarantorPhone || null,
             l.status || 'Outstanding',
+            l.receiptNo || l.loanNo || '',
             l.notes || null,
             l.updatedAt || null
           ]
@@ -880,32 +881,35 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
             if (rep.id) allRepIds.push(rep.id);
             await pool.query(
               `INSERT INTO \`loan_repayments\` (
-                \`id\`, \`loan_id\`, \`receipt_no\`, \`repayment_date\`, \`entry_type\`,
-                \`amount\`, \`currency\`, \`previous_balance\`, \`new_balance\`,
-                \`payment_method\`, \`received_by\`, \`notes\`, \`updated_at\`
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                \`id\`, \`loan_id\`, \`repayment_date\`, \`entry_type\`, \`amount\`, \`currency\`,
+                \`payment_method\`, \`reference_no\`, \`receipt_no\`, \`previous_balance\`,
+                \`new_balance\`, \`received_by\`, \`notes\`, \`updated_at\`
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
               ON DUPLICATE KEY UPDATE
                 \`repayment_date\`=VALUES(\`repayment_date\`),
                 \`entry_type\`=VALUES(\`entry_type\`),
                 \`amount\`=VALUES(\`amount\`),
                 \`currency\`=VALUES(\`currency\`),
+                \`payment_method\`=VALUES(\`payment_method\`),
+                \`reference_no\`=VALUES(\`reference_no\`),
+                \`receipt_no\`=VALUES(\`receipt_no\`),
                 \`previous_balance\`=VALUES(\`previous_balance\`),
                 \`new_balance\`=VALUES(\`new_balance\`),
-                \`payment_method\`=VALUES(\`payment_method\`),
                 \`received_by\`=VALUES(\`received_by\`),
                 \`notes\`=VALUES(\`notes\`),
                 \`updated_at\`=VALUES(\`updated_at\`)`,
               [
                 rep.id,
                 l.id,
-                rep.receiptNo || '',
-                rep.date,
+                rep.date || '',
                 rep.entryType || 'repayment',
                 Number(rep.amount || 0),
-                rep.currency || l.currency || 'AED',
+                rep.currency || l.currency || 'PKR',
+                rep.paymentMethod || 'Cash',
+                rep.referenceNo || null,
+                rep.receiptNo || '',
                 Number(rep.previousBalance || 0),
                 Number(rep.newBalance || 0),
-                rep.paymentMethod || 'Cash',
                 rep.receivedBy || null,
                 rep.notes || null,
                 rep.updatedAt || null
@@ -932,32 +936,29 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
       for (const acc of data) {
         await pool.query(
           `INSERT INTO \`amanat_accounts\` (
-            \`id\`, \`account_no\`, \`owner_id\`, \`owner_name\`, \`owner_phone\`, \`owner_address\`,
-            \`city\`, \`station\`, \`currency\`, \`current_balance\`, \`opened_date\`, \`notes\`
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            \`id\`, \`account_no\`, \`owner_name\`, \`owner_phone\`, \`owner_address\`,
+            \`city\`, \`currency\`, \`opened_date\`, \`current_balance\`, \`notes\`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE
             \`account_no\`=VALUES(\`account_no\`),
             \`owner_name\`=VALUES(\`owner_name\`),
             \`owner_phone\`=VALUES(\`owner_phone\`),
             \`owner_address\`=VALUES(\`owner_address\`),
             \`city\`=VALUES(\`city\`),
-            \`station\`=VALUES(\`station\`),
             \`currency\`=VALUES(\`currency\`),
-            \`current_balance\`=VALUES(\`current_balance\`),
             \`opened_date\`=VALUES(\`opened_date\`),
+            \`current_balance\`=VALUES(\`current_balance\`),
             \`notes\`=VALUES(\`notes\`)`,
           [
             acc.id,
             acc.accountNo || acc.id,
-            acc.ownerId || null,
-            acc.ownerName,
+            acc.ownerName || '',
             acc.ownerPhone || '',
             acc.ownerAddress || null,
             acc.city || null,
-            acc.station || null,
-            acc.currency || 'AED',
+            acc.currency || 'PKR',
+            acc.openedDate || new Date().toISOString().split('T')[0],
             Number(acc.currentBalance || 0),
-            acc.openedDate,
             acc.notes || null
           ]
         );
@@ -966,38 +967,39 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
             if (ent.id) allAmnEntryIds.push(ent.id);
             await pool.query(
               `INSERT INTO \`amanat_entries\` (
-                \`id\`, \`account_id\`, \`receipt_no\`, \`entry_date\`, \`tx_type\`,
-                \`amount\`, \`currency\`, \`previous_balance\`, \`new_balance\`,
-                \`related_person\`, \`payment_method\`, \`bank_name\`, \`description\`,
-                \`linked_transfer_id\`, \`updated_at\`
+                \`id\`, \`account_id\`, \`entry_date\`, \`entry_type\`, \`amount\`, \`currency\`,
+                \`description\`, \`related_person\`, \`previous_balance\`, \`new_balance\`,
+                \`receipt_no\`, \`payment_method\`, \`bank_name\`, \`notes\`, \`updated_at\`
               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
               ON DUPLICATE KEY UPDATE
                 \`entry_date\`=VALUES(\`entry_date\`),
-                \`tx_type\`=VALUES(\`tx_type\`),
+                \`entry_type\`=VALUES(\`entry_type\`),
                 \`amount\`=VALUES(\`amount\`),
                 \`currency\`=VALUES(\`currency\`),
+                \`description\`=VALUES(\`description\`),
+                \`related_person\`=VALUES(\`related_person\`),
                 \`previous_balance\`=VALUES(\`previous_balance\`),
                 \`new_balance\`=VALUES(\`new_balance\`),
-                \`related_person\`=VALUES(\`related_person\`),
+                \`receipt_no\`=VALUES(\`receipt_no\`),
                 \`payment_method\`=VALUES(\`payment_method\`),
                 \`bank_name\`=VALUES(\`bank_name\`),
-                \`description\`=VALUES(\`description\`),
+                \`notes\`=VALUES(\`notes\`),
                 \`updated_at\`=VALUES(\`updated_at\`)`,
               [
                 ent.id,
                 acc.id,
-                ent.receiptNo || '',
-                ent.date,
+                ent.date || '',
                 ent.type || 'additional_deposit',
                 Number(ent.amount || 0),
-                ent.currency || acc.currency || 'AED',
+                ent.currency || acc.currency || 'PKR',
+                ent.description || '',
+                ent.relatedPerson || null,
                 Number(ent.previousBalance || 0),
                 Number(ent.newBalance || 0),
-                ent.relatedPerson || null,
+                ent.receiptNo || '',
                 ent.paymentMethod || 'Cash',
                 ent.bankName || null,
-                ent.description || '',
-                ent.linkedTransferId || null,
+                ent.notes || null,
                 ent.updatedAt || null
               ]
             );
@@ -1019,12 +1021,12 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
       for (const le of data) {
         await pool.query(
           `INSERT INTO \`cash_ledger\` (
-            \`id\`, \`entry_date\`, \`tx_type\`, \`category\`, \`amount\`, \`currency\`,
-            \`reference_id\`, \`party_name\`, \`payment_method\`, \`description\`, \`updated_at\`
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            \`id\`, \`entry_date\`, \`entry_type\`, \`category\`, \`amount\`, \`currency\`,
+            \`reference_id\`, \`party_name\`, \`payment_method\`, \`description\`, \`notes\`, \`updated_at\`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE
             \`entry_date\`=VALUES(\`entry_date\`),
-            \`tx_type\`=VALUES(\`tx_type\`),
+            \`entry_type\`=VALUES(\`entry_type\`),
             \`category\`=VALUES(\`category\`),
             \`amount\`=VALUES(\`amount\`),
             \`currency\`=VALUES(\`currency\`),
@@ -1032,10 +1034,11 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
             \`party_name\`=VALUES(\`party_name\`),
             \`payment_method\`=VALUES(\`payment_method\`),
             \`description\`=VALUES(\`description\`),
+            \`notes\`=VALUES(\`notes\`),
             \`updated_at\`=VALUES(\`updated_at\`)`,
           [
             le.id,
-            le.date,
+            le.date || '',
             le.type || 'cash_in',
             le.category || 'adjustment',
             Number(le.amount || 0),
@@ -1044,6 +1047,7 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
             le.partyName || null,
             le.paymentMethod || 'Cash',
             le.description || '',
+            le.notes || null,
             le.updatedAt || null
           ]
         );
@@ -1058,30 +1062,30 @@ async function syncRelationalKeyToMySQL(pool: any, key: string, data: any): Prom
       for (const u of data) {
         await pool.query(
           `INSERT INTO \`users\` (
-            \`id\`, \`username\`, \`password_hash\`, \`full_name\`, \`full_name_ur\`,
-            \`role\`, \`phone\`, \`status\`, \`station_access\`, \`permissions_json\`, \`created_at\`
+            \`id\`, \`username\`, \`password\`, \`full_name\`, \`full_name_ur\`,
+            \`role\`, \`station_access\`, \`status\`, \`permissions_json\`, \`last_login\`, \`created_at\`
           ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE
             \`username\`=VALUES(\`username\`),
-            \`password_hash\`=VALUES(\`password_hash\`),
+            \`password\`=VALUES(\`password\`),
             \`full_name\`=VALUES(\`full_name\`),
             \`full_name_ur\`=VALUES(\`full_name_ur\`),
             \`role\`=VALUES(\`role\`),
-            \`phone\`=VALUES(\`phone\`),
-            \`status\`=VALUES(\`status\`),
             \`station_access\`=VALUES(\`station_access\`),
-            \`permissions_json\`=VALUES(\`permissions_json\`)`,
+            \`status\`=VALUES(\`status\`),
+            \`permissions_json\`=VALUES(\`permissions_json\`),
+            \`last_login\`=VALUES(\`last_login\`)`,
           [
             u.id,
             u.username,
             u.password || '',
             u.fullName || u.username,
-            u.fullNameUr || u.fullName || '',
+            u.fullNameUr || u.fullName || null,
             u.role || 'cashier',
-            u.phone || null,
-            u.status || 'active',
             Array.isArray(u.stationAccess) ? JSON.stringify(u.stationAccess) : (u.stationAccess || 'all'),
+            u.status || 'active',
             u.permissions ? JSON.stringify(u.permissions) : null,
+            u.lastLogin || null,
             u.createdAt || null
           ]
         );
@@ -1135,48 +1139,60 @@ async function loadAllState(): Promise<StoreMap> {
   return memoryStore;
 }
 
-async function saveKeyState(key: string, data: unknown): Promise<void> {
-  const current = readDiskStore();
-  current[key] = data;
-  memoryStore = current;
-  writeDiskStore(memoryStore);
+let serverWriteQueue: Promise<void> = Promise.resolve();
 
-  const pool = await getMySQLPool();
-  if (pool) {
-    try {
-      await pool.query(
-        'INSERT INTO `app_kv_store` (`store_key`, `store_value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `store_value` = VALUES(`store_value`)',
-        [key, JSON.stringify(data)]
-      );
-      await syncRelationalKeyToMySQL(pool, key, data);
-    } catch (err) {
-      console.error('MySQL save error:', err);
+function enqueueServerWrite(task: () => Promise<void>): Promise<void> {
+  const next = serverWriteQueue.then(task, task);
+  serverWriteQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function saveKeyState(key: string, data: unknown): Promise<void> {
+  return enqueueServerWrite(async () => {
+    const current = readDiskStore();
+    current[key] = data;
+    memoryStore = current;
+    writeDiskStore(memoryStore);
+
+    const pool = await getMySQLPool();
+    if (pool) {
+      try {
+        await pool.query(
+          'INSERT INTO `app_kv_store` (`store_key`, `store_value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `store_value` = VALUES(`store_value`)',
+          [key, JSON.stringify(data)]
+        );
+        await syncRelationalKeyToMySQL(pool, key, data);
+      } catch (err) {
+        console.error('MySQL save error:', err);
+      }
     }
-  }
+  });
 }
 
 async function saveBulkState(store: StoreMap): Promise<void> {
-  const current = readDiskStore();
-  for (const [key, value] of Object.entries(store)) {
-    current[key] = value;
-  }
-  memoryStore = current;
-  writeDiskStore(memoryStore);
-
-  const pool = await getMySQLPool();
-  if (pool) {
-    try {
-      for (const [key, value] of Object.entries(store)) {
-        await pool.query(
-          'INSERT INTO `app_kv_store` (`store_key`, `store_value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `store_value` = VALUES(`store_value`)',
-          [key, JSON.stringify(value)]
-        );
-        await syncRelationalKeyToMySQL(pool, key, value);
-      }
-    } catch (err) {
-      console.error('MySQL bulk save error:', err);
+  return enqueueServerWrite(async () => {
+    const current = readDiskStore();
+    for (const [key, value] of Object.entries(store)) {
+      current[key] = value;
     }
-  }
+    memoryStore = current;
+    writeDiskStore(memoryStore);
+
+    const pool = await getMySQLPool();
+    if (pool) {
+      try {
+        for (const [key, value] of Object.entries(store)) {
+          await pool.query(
+            'INSERT INTO `app_kv_store` (`store_key`, `store_value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `store_value` = VALUES(`store_value`)',
+            [key, JSON.stringify(value)]
+          );
+          await syncRelationalKeyToMySQL(pool, key, value);
+        }
+      } catch (err) {
+        console.error('MySQL bulk save error:', err);
+      }
+    }
+  });
 }
 
 async function startServer() {
